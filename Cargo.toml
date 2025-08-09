@@ -1,0 +1,19 @@
+[package]
+name = "Redefyning"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Windowing and event handling
+winit = "0.29.0"
+# Graphics APIs
+ash = {version = "0.38.0", optional = true}
+glium = {version = "0.36.0", optional = true}
+
+
+[features]
+default = ["vulkan", "debug"]
+# Enables Debugging Internally, extremely slow but useful for development
+debug = []
+vulkan = ["dep:ash"]
+open_gl = ["dep:glium"]
