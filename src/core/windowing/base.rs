@@ -17,6 +17,31 @@ pub mod windowing {
         event_sender: mpsc::Sender<AtomicBool>,
     }
 
+pub struct WindowAttributes {
+    pub inner_size: Option<64, 64>,
+    pub min_inner_size: Option<100,100>,
+    pub max_inner_size: Option<1000,1000>,
+    pub position: Option<0,0>,
+    pub resizable: True,
+    pub enabled_buttons: WindowButtons,
+    pub title: String,
+    pub maximized: bool,
+    pub visible: bool,
+    pub transparent: bool,
+    pub blur: bool,
+    pub decorations: bool,
+    pub window_icon: Option<Icon>,
+    pub preferred_theme: Option<Theme>,
+    pub resize_increments: Option<Size>,
+    pub content_protected: bool,
+    pub window_level: WindowLevel,
+    pub active: bool,
+    pub cursosr: Cursor,
+    pub fullscreen: Option<Fullscreen>,
+
+}
+
+    
     impl ApplicationHandler for Windowing {
         fn resumed(&mut self, event_loop: &ActiveEventLoop) {
             self.window = Some(
