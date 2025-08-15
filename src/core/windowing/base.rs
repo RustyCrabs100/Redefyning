@@ -15,7 +15,7 @@ pub mod windowing {
     pub struct Windowing {
         window: Option<Window>,
         event_sender: mpsc::Sender<AtomicBool>,
-
+    }
     
     impl ApplicationHandler for Windowing {
         fn resumed(&mut self, event_loop: &ActiveEventLoop) {

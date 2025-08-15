@@ -6,4 +6,4 @@ mod base;
 mod setup;
 
 // Public Includes
-pub use setup::VulkanInit;
+pub use setup::vulkan::VulkanInit;
