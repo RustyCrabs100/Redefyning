@@ -30,13 +30,13 @@ pub mod vulkan {
     }
 
     impl VulkanInit {
-        pub fn new(rx: mpsc::Receiver<AtomicBool>) -> Self {
+        pub fn new(rx: mpsc::Receiver<AtomicBool>) -> VkResult<Self> {
             let entry = unsafe {Entry::load().expect("Failed to load Vulkan Entry Points")};
-            let instance = Self::create_instance(&entry).unwrap();
-            Self {
+            let instance = Self::create_instance(&entry)?;
+            Ok(Self {
                 reciever: rx,
                 instance
-            }   
+            })   
         }
 
         fn create_instance(entry: &Entry) -> VkResult<Instance> {
@@ -51,7 +51,7 @@ pub mod vulkan {
                 .flags(vk::InstanceCreateFlags::ENUMERATE_PORTABILITY_KHR)
                 .application_info(&app_info);
 
-            Ok(unsafe { entry.create_instance(&create_info, None).expect("Unable to create Instance")})
+            Ok(unsafe { entry.create_instance(&create_info, None)?})
         }
 
         fn create_instance_layers(entry: &Entry) {
