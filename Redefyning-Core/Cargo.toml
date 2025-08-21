@@ -6,14 +6,14 @@ edition.workspace = true
 [dependencies]
 # Rust Vulkan Wrappers
 ash = {version = "0.38.0", optional = true}
-# Ash Windowing Support
-ash-window = {version = "0.13.0", optional = true}
 # Low Level Audio Handler
 cpal = "0.16.0"
 # UI
 egui = "0.32.1"
 # Basic Windowing + Input
 minifb = "0.28.0"
+# Raw Window Handle Creator
+raw-window-handle = "=0.6.2"
 # Math
 glam = "0.30.5"
 # Error Handling
@@ -31,11 +31,11 @@ bytemuck = "1.23.2"
 
 [features]
 # Remove "debug" as a Default Feature once Development is Stable
-default = ["vulkan", "debug"]
+default = ["vulkan", "debug", "blend_usage"]
 # Enables Debugging
 debug = []
 # Enables the Vulkan Renderer
-vulkan = ["dep:ash", "dep:ash-window"]
+vulkan = ["dep:ash"]
 # Enables the OpenGL Renderer
 # open_gl = []
 # Allows Importing .blend files
