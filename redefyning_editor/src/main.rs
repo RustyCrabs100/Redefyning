@@ -1,3 +1,6 @@
+use redefyning;
+
 fn main() {
-    println!("Hello, world!");
+    let result = redefyning::add(2, 2);
+    println!("{}", result);
 }
