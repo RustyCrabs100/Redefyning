@@ -1,0 +1,13 @@
+[workspace]
+resolver = "3"
+members = [
+    "redefyning_editor",
+    "Redefyning-Core",
+]
+
+[workspace.package]
+edition = "2024"
+license = "MIT"
+
+
+[workspace.dependencies]

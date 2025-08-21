@@ -1,7 +1,7 @@
 [package]
 name = "redefyning_editor"
 version = "0.0.0"
-edition = "2024"
+edition.workspace = true
 
 [dependencies]
 redefyning = { path = "../Redefyning-Core"}
