@@ -4,3 +4,39 @@ version = "0.0.0"
 edition = "2024"
 
 [dependencies]
+# Rust Vulkan Wrappers
+ash = {version = "0.38.0", optional = true}
+# Ash Windowing Support
+ash-window = {version = "0.13.0", optional = true}
+# Low Level Audio Handler
+cpal = "0.16.0"
+# UI
+egui = "0.32.1"
+# Basic Windowing + Input
+minifb = "0.28.0"
+# Math
+glam = "0.30.5"
+# Error Handling
+error-stack = "0.5.0"
+# Image Loader/Handler
+image = "0.25.6"
+# .blend File Loader/Handler
+blend = {version = "0.8.0", optional = true}
+# .gltf (JSON + External Buffers) & .glb (binary) File Loader/Handler
+gltf = "1.4.1"
+# Safe-ish Type Conversions
+bytemuck = "1.23.2"
+
+# Needs OpenGL Wrappers, but I need light ones (glium's too heavy)
+
+[features]
+# Remove "debug" as a Default Feature once Development is Stable
+default = ["vulkan", "debug"]
+# Enables Debugging
+debug = []
+# Enables the Vulkan Renderer
+vulkan = ["dep:ash", "dep:ash-window"]
+# Enables the OpenGL Renderer
+# open_gl = []
+# Allows Importing .blend files
+blend_usage = ["dep:blend"]
