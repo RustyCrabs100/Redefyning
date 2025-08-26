@@ -1,6 +1,10 @@
 use redefyning;
 
 fn main() {
-    let result = redefyning::add(2, 2);
-    println!("{}", result);
+    redefyning::init(
+        "TEST - Press ESC to Exit",
+        (640, 480),
+        None,
+        None,
+    );
 }
