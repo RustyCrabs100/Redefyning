@@ -1,4 +1,10 @@
 use minifb;
+use minifb::{HasWindowHandle};
+use raw_window_handle::{
+    HasDisplayHandle,
+    DisplayHandle,
+    WindowHandle
+};
 
 const DEFAULT_WIDTH: usize = 640;
 const DEFAULT_HEIGHT: usize = 480;
@@ -76,6 +82,13 @@ impl GameWindow {
         while self.window.is_open() && !self.window.is_key_down(minifb::Key::Escape) {
             self.window
                 .update();
-        }
+        } 
+    }
+
+    pub fn surface_handles(&self) -> (WindowHandle<'_>, DisplayHandle<'_>) {
+        (
+            self.window.window_handle().expect("Failed to get a Window Handle"),
+            self.window.display_handle().expect("Failed to get a Display Handle"),
+        )
     }
 }

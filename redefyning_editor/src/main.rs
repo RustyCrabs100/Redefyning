@@ -1,10 +1,16 @@
-use redefyning;
+use redefyning::{
+    init,
+    WindowSettings,
+};
 
 fn main() {
-    redefyning::init(
+    init(
         "TEST - Press ESC to Exit",
         (640, 480),
-        None,
+        Some(WindowSettings {
+            resize: false,
+            ..Default::default()
+        }),
         None,
     );
 }

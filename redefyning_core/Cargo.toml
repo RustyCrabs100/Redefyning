@@ -31,13 +31,13 @@ symphonia = "0.5.4"
 # Serialize/Deserialize
 serde = "1.0.219"
 # Rust Wrapper around MiMalloc (Faster Allocator for some stuff)
-mimalloc = "0.1.47"
+mimalloc = {version = "0.1.47", optional = true}
 
 # Needs OpenGL Wrappers, but I need light ones (glium's too heavy)
 
 [features]
 # Remove "debug" as a Default Feature once Development is Stable
-default = ["vulkan", "debug", "blend_usage"]
+default = ["vulkan", "debug", "mimalloc", "blend_usage"]
 # Enables Debugging
 debug = []
 # Enables the Vulkan Renderer
@@ -46,3 +46,5 @@ vulkan = ["dep:ash"]
 # open_gl = []
 # Allows Importing .blend files
 blend_usage = ["dep:blend"]
+# Sets the Global Allocator to MiMalloc
+mimalloc = ["dep:mimalloc"]
