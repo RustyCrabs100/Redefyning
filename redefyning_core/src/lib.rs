@@ -8,6 +8,10 @@
 #[path = "window.rs"]
 mod window;
 
+#[cfg(feature = "vulkan")]
+#[path = "vulkan.rs"]
+mod vulkan;
+
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -15,18 +19,27 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 pub use minifb::WindowOptions as WindowSettings;
 
 pub fn init(
-    app_window_name: &str,
+    app_name: &str,
+    // Variant, Major, Minor, Patch
+    app_version: (u32, u32, u32, u32),
     app_window_size: (usize, usize),
     app_window_settings: Option<WindowSettings>,
     app_fps: Option<usize>
 ) {
     let mut game_window = window::GameWindow::new(
-        app_window_name,
+        app_name,
         app_window_size,
         app_window_settings,
         app_fps,
     );
     let surface_handles = game_window.surface_handles();
+    #[cfg(feature = "vulkan")] {
+        let vulkan_setup = vulkan::VulkanSetup::new(
+            surface_handles,
+            app_name,
+            app_version,
+        ).expect("Unable to create Vulkan Setup");
+    }
     // Last Piece of Code, dont put anything after it
     game_window.update();
 }
