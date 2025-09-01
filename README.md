@@ -1,14 +1,14 @@
 # NOTE
-Redefyning is currently under it's ***VERY** Early Stages in Development.
+Redefyning is currently under it's ***VERY*** Early Stages in Development.
 
 # Redefyning
 A Game Engine all about Performance and Efficiency
 
 ## Why would I use Redefyning for my Games?
 Currently, you shouldn't, and couldn't.
-This Game Engine is under develop, and isn't even working as a Game Engine.
+This Game Engine is under development, and isn't even working as a Game Engine.
 We're still in the ***VERY*** early parts of Development.
-Our code WILL NOT be very performant in this stage, as we're trying to get our game engine to *actually* be usable.
+Our code WILL NOT be very performative in this stage, as we're trying to get our game engine to *actually* be usable.
 
 ### Why would I want to use Redefyning for my Games once it's entered a usable state?
 Redefyning is a Game Engine obsessed with your game's being Performant, Efficient, and Easy to Develop.
