@@ -26,6 +26,9 @@ pub fn init(
     app_window_settings: Option<WindowSettings>,
     app_fps: Option<usize>
 ) {
+    if !(cfg!(feature = "debug")) || !(cfg!(debug_assertions)) {
+        panic!("debug feature enabled but debug_assertions isn't enabled");
+    }
     let mut game_window = window::GameWindow::new(
         app_name,
         app_window_size,
