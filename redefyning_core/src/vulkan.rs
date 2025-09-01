@@ -4,7 +4,6 @@ use {
     std::{
         ffi::{
             CString,
-            CStr,
             c_char,
         },
         sync::Arc,    
@@ -17,10 +16,10 @@ use {
             InstanceCreateInfo,
             InstanceCreateFlags,
             make_api_version,
-            ExtensionProperties,
-            LayerProperties,
+            DebugUtilsMessengerEXT,
         },
-        Instance
+        Instance,
+        ext::debug_utils,
     },
     raw_window_handle::{
         WindowHandle, 
@@ -28,13 +27,18 @@ use {
     }
 };
 
+#[path = "debug_vk.rs"]
+mod debug;
+
 pub struct VulkanSetup {
     entry: Arc<Entry>,
     instance: Arc<Instance>,
+    debug_utils_loader: Arc<debug_utils::Instance>,
+    debug_messenger: Option<DebugUtilsMessengerEXT>,
 } 
 
 impl VulkanSetup {
-    pub fn new(
+    pub(crate) fn new(
         surface_handles: (
             WindowHandle<'_>, DisplayHandle<'_>
         ),
@@ -45,8 +49,21 @@ impl VulkanSetup {
         println!("{:#?}", surface_handles);
         let entry = Arc::new(unsafe{Entry::load()?});
         let instance = Self::instance(&entry, application_name, application_version)?;
+        let debug_utils_loader = Arc::new(debug_utils::Instance::new(&entry, &instance));
+        let debug_messenger = {
+            #[cfg(feature = "debug")]
+            {
+                Some(debug::vk_setup_debug_messenger(&debug_utils_loader))
+            }
+            #[cfg(not(feature = "debug"))] {
+                None
+            }
+        };
         Ok(Self {
-            entry, instance
+            entry, instance,
+            debug_utils_loader,
+            #[cfg(feature = "debug")]
+            debug_messenger
         })
     }
 
@@ -113,8 +130,12 @@ impl VulkanSetup {
 }
 
 impl Drop for VulkanSetup {
+    // Drop everything in Order in this, or else there's going to be segmentation faults.
     fn drop(&mut self) {
         unsafe {
+            if let Some(x) = self.debug_messenger {
+                self.debug_utils_loader.destroy_debug_utils_messenger(x, None);
+            }
             // Last Line, nothing comes after this (for your own good)
             self.instance.destroy_instance(None);
         }
