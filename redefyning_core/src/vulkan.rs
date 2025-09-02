@@ -4,6 +4,7 @@ use {
     std::{
         ffi::{
             CString,
+            CStr,
             c_char,
         },
         sync::Arc,    
@@ -17,6 +18,8 @@ use {
             InstanceCreateFlags,
             make_api_version,
             DebugUtilsMessengerEXT,
+            PhysicalDevice,
+            QueueFlags,
         },
         Instance,
         ext::debug_utils,
@@ -30,13 +33,25 @@ use {
 #[path = "debug_vk.rs"]
 mod debug;
 
+// Don't give this a string with a Null terminator
+macro_rules! str_to_p_const_c_char {
+    ($s:expr) => {{
+        const BYTES: &[u8] = concat!($s, "\0").as_bytes();
+        const REF_CSTR: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(BYTES)};
+        REF_CSTR.as_ptr()
+    }};
+}
+
+
 pub struct VulkanSetup {
     entry: Arc<Entry>,
     instance: Arc<Instance>,
     debug_utils_loader: Arc<debug_utils::Instance>,
     debug_messenger: Option<DebugUtilsMessengerEXT>,
+    physical_device: Arc<PhysicalDevice>,
 } 
 
+/// Merge all the other impl VulkanSetup's
 impl VulkanSetup {
     pub(crate) fn new(
         surface_handles: (
@@ -59,14 +74,19 @@ impl VulkanSetup {
                 None
             }
         };
+        let physical_device = Self::pick_physical_device(&instance);
         Ok(Self {
             entry, instance,
             debug_utils_loader,
             #[cfg(feature = "debug")]
-            debug_messenger
+            debug_messenger,
+            physical_device
         })
     }
+}
 
+/// Vulkan Instance
+impl VulkanSetup {
     fn instance(
         entry: &Entry,
         application_name: &str,
@@ -126,6 +146,84 @@ impl VulkanSetup {
             .into_iter()
             .map(|cs| cs.into_raw() as *const c_char)
             .collect()
+    }
+}
+
+/// Device And Queue Families
+impl VulkanSetup {
+
+    const REQUIRED_DEVICE_EXTENSIONS: [*const c_char; 21] = [
+        // Swapchain Creation
+        str_to_p_const_c_char!("VK_KHR_swapchain"),
+        // Added Dynamic Rendering, Flexible Pipelines
+        str_to_p_const_c_char!("VK_KHR_dynamic_rendering"),
+        // Graph Frame-friendly Sync
+        str_to_p_const_c_char!("VK_KHR_timeline_semaphore"),
+        // Cleaner, less error-prone sync API
+        str_to_p_const_c_char!("VK_KHR_synchronization2"),
+        // Change Cull Mode, Topology, Blend State, etc. at draw time.
+        str_to_p_const_c_char!("VK_EXT_extended_dynamic_state"),
+        str_to_p_const_c_char!("VK_EXT_extended_dynamic_state2"),
+        str_to_p_const_c_char!("VK_EXT_extended_dynamic_state3"),
+        // Dynamic Vertex Bindings/Attibutes
+        str_to_p_const_c_char!("VK_EXT_vertex_input_dynamic_state"),
+        // Per-attachment color write control
+        str_to_p_const_c_char!("VK_EXT_color_write_enable"),
+        // Bindless textures/buffers, sparse descriptor arrays
+        str_to_p_const_c_char!("VK_EXT_descriptor_indexing"),
+        // GPU pointers for bindless/resource-descriptor-less acces
+        str_to_p_const_c_char!("VK_KHR_buffer_device_address"),
+        // Query VRAM Usage
+        str_to_p_const_c_char!("VK_EXT_memory_budget"),
+        // Lower-percision math for bandwidth saving
+        str_to_p_const_c_char!("VK_KHR_shader_float16_int8"),
+        // Integer dot products for ML/physics.
+        str_to_p_const_c_char!("VK_KHR_shader_integer_dot_product"),
+        // Negative viewport height, minor fixes
+        str_to_p_const_c_char!("VK_KHR_maintenance1"),
+        // New image layouts, subpass dependency improvements
+        str_to_p_const_c_char!("VK_KHR_maintenance2"),
+        // Descriptor query improvements
+        str_to_p_const_c_char!("VK_KHR_maintenance3"),
+        // Device memory null handles, improved queries,
+        str_to_p_const_c_char!("VK_KHR_maintenance4"),
+        // Pipeline creation feedback, descriptor indexing improvements
+        str_to_p_const_c_char!{"VK_KHR_maintenance5"},
+        // SPIR-V 1.4 Support
+        str_to_p_const_c_char!("VK_KHR_spirv_1_4"),
+        // Extended Renderpass Creation
+        str_to_p_const_c_char!("VK_KHR_create_renderpass2"),
+    ];
+
+    fn pick_physical_device(
+        instance: &Instance,
+    ) -> Arc<PhysicalDevice> {
+        let devices = unsafe { instance.enumerate_physical_devices().unwrap()};
+        if devices.is_empty() {
+            panic!("Failed to find GPUs with Vulkan Support");
+        }
+        let physical_device = devices.into_iter()
+            .find( |&device| unsafe {
+                let props = instance.get_physical_device_properties(device);
+                if props.api_version < make_api_version(0, 1, 3, 286) {
+                    panic!(
+                        "Your Vulkan API Version is not supported. Your current API version: {}, needed API version: {}",
+                        props.api_version, make_api_version(0, 1, 3, 286)
+                    );
+                }
+                let queue_families = instance.get_physical_device_queue_family_properties(device);
+                if !(queue_families.iter().any(|qf| qf.queue_flags.contains(QueueFlags::GRAPHICS))) {
+                    panic!("No queue family supports Graphics");
+                }
+                let extensions = instance.enumerate_device_extension_properties(device).unwrap();
+                let has_all_exts = Self::REQUIRED_DEVICE_EXTENSIONS.iter().all(|&req| {
+                    extensions.iter().any(|ext| {
+                        CStr::from_ptr(ext.extension_name.as_ptr()) == CStr::from_ptr(req)
+                    })
+                });
+                has_all_exts
+            }).expect("No suitable GPU found");
+        Arc::new(physical_device)    
     }
 }
 
