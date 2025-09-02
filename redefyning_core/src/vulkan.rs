@@ -152,7 +152,9 @@ impl VulkanSetup {
 /// Device And Queue Families
 impl VulkanSetup {
 
-    const REQUIRED_DEVICE_EXTENSIONS: [*const c_char; 21] = [
+    // Some of these extensions are automatically included in Core, but i'm adding them here
+    // For improved readability
+    const REQUIRED_DEVICE_EXTENSIONS: &[*const c_char] = &[
         // Swapchain Creation
         str_to_p_const_c_char!("VK_KHR_swapchain"),
         // Added Dynamic Rendering, Flexible Pipelines
@@ -188,7 +190,7 @@ impl VulkanSetup {
         // Device memory null handles, improved queries,
         str_to_p_const_c_char!("VK_KHR_maintenance4"),
         // Pipeline creation feedback, descriptor indexing improvements
-        str_to_p_const_c_char!{"VK_KHR_maintenance5"},
+        str_to_p_const_c_char!("VK_KHR_maintenance5"),
         // SPIR-V 1.4 Support
         str_to_p_const_c_char!("VK_KHR_spirv_1_4"),
         // Extended Renderpass Creation
