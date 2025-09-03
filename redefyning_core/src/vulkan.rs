@@ -32,7 +32,8 @@ use {
             PhysicalDeviceExtendedDynamicState2FeaturesEXT,
             PhysicalDeviceExtendedDynamicState3FeaturesEXT,
             PhysicalDeviceColorWriteEnableFeaturesEXT,
-            Bool32
+            Bool32,
+            Queue
         },
         Instance,
         ext::debug_utils,
@@ -63,7 +64,8 @@ pub struct VulkanSetup {
     debug_utils_loader: Arc<debug_utils::Instance>,
     debug_messenger: Option<DebugUtilsMessengerEXT>,
     physical_device: Arc<PhysicalDevice>,
-    logical_device: Arc<Device>
+    logical_device: Arc<Device>, 
+    graphics_queue: Arc<Queue>,
 } 
 
 /// Merge all the other impl VulkanSetup's
@@ -91,6 +93,8 @@ impl VulkanSetup {
         };
         let physical_device = Self::pick_physical_device(&instance);
         let logical_device = Self::create_logical_device(&instance, &physical_device);
+        let graphics_index = Self::find_graphics_queue_family(&instance, &physical_device);
+        let graphics_queue = Self::create_graphics_queue(&logical_device, &graphics_index);
         Ok(Self {
             entry, instance,
             debug_utils_loader,
@@ -98,6 +102,7 @@ impl VulkanSetup {
             debug_messenger,
             physical_device,
             logical_device,
+            graphics_queue
         })
     }
 }
@@ -319,6 +324,13 @@ impl VulkanSetup {
             .queue_create_infos(logical_device_queue_create_info)
             .enabled_features(&physical_device_features);
         unsafe { Arc::new(instance.create_device(*physical_device, &logical_device_create_info, None).expect("Failed to create a Vulkan Device"))}
+    }
+
+    fn create_graphics_queue(
+        device: &Device,
+        graphics_index: &u32
+    ) -> Arc<Queue> {
+        return Arc::new(unsafe {device.get_device_queue(*graphics_index, 0)});
     }
 
     fn find_graphics_queue_family(
