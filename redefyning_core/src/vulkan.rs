@@ -13,6 +13,8 @@ use {
         prelude::VkResult,
         Entry,
         vk::{
+            TRUE,
+            FALSE,
             ApplicationInfo,
             InstanceCreateInfo,
             InstanceCreateFlags,
@@ -20,9 +22,21 @@ use {
             DebugUtilsMessengerEXT,
             PhysicalDevice,
             QueueFlags,
+            QueueFamilyProperties,
+            DeviceCreateInfo,
+            DeviceQueueCreateInfo,
+            PhysicalDeviceFeatures,
+            PhysicalDeviceVulkan12Features,
+            PhysicalDeviceVulkan13Features,
+            PhysicalDeviceExtendedDynamicStateFeaturesEXT,
+            PhysicalDeviceExtendedDynamicState2FeaturesEXT,
+            PhysicalDeviceExtendedDynamicState3FeaturesEXT,
+            PhysicalDeviceColorWriteEnableFeaturesEXT,
+            Bool32
         },
         Instance,
         ext::debug_utils,
+        Device,
     },
     raw_window_handle::{
         WindowHandle, 
@@ -49,6 +63,7 @@ pub struct VulkanSetup {
     debug_utils_loader: Arc<debug_utils::Instance>,
     debug_messenger: Option<DebugUtilsMessengerEXT>,
     physical_device: Arc<PhysicalDevice>,
+    logical_device: Arc<Device>
 } 
 
 /// Merge all the other impl VulkanSetup's
@@ -75,12 +90,14 @@ impl VulkanSetup {
             }
         };
         let physical_device = Self::pick_physical_device(&instance);
+        let logical_device = Self::create_logical_device(&instance, &physical_device);
         Ok(Self {
             entry, instance,
             debug_utils_loader,
             #[cfg(feature = "debug")]
             debug_messenger,
-            physical_device
+            physical_device,
+            logical_device,
         })
     }
 }
@@ -151,7 +168,6 @@ impl VulkanSetup {
 
 /// Device And Queue Families
 impl VulkanSetup {
-
     // Some of these extensions are automatically included in Core, but i'm adding them here
     // For improved readability
     const REQUIRED_DEVICE_EXTENSIONS: &[*const c_char] = &[
@@ -218,15 +234,105 @@ impl VulkanSetup {
                     panic!("No queue family supports Graphics");
                 }
                 let extensions = instance.enumerate_device_extension_properties(device).unwrap();
-                let has_all_exts = Self::REQUIRED_DEVICE_EXTENSIONS.iter().all(|&req| {
+                return Self::REQUIRED_DEVICE_EXTENSIONS.iter().all(|&req| {
                     extensions.iter().any(|ext| {
                         CStr::from_ptr(ext.extension_name.as_ptr()) == CStr::from_ptr(req)
                     })
                 });
-                has_all_exts
             }).expect("No suitable GPU found");
         Arc::new(physical_device)    
     }
+
+    fn create_logical_device(
+        instance: &Instance,
+        physical_device: &PhysicalDevice,
+    ) -> Arc<Device> {
+        let priorities: &[f32] = &[0.0];
+        let graphics_index = Self::find_graphics_queue_family(
+            instance,
+            physical_device
+        );   
+        let queue_family_properties = unsafe { instance.get_physical_device_queue_family_properties(*physical_device)};
+        let logical_device_queue_create_info = &[DeviceQueueCreateInfo::default()
+            .queue_family_index(graphics_index)
+            .queue_priorities(priorities)];
+        let physical_device_features: PhysicalDeviceFeatures = unsafe {
+            instance.get_physical_device_features(*physical_device)
+        }; 
+        let mut physical_device_features_vulkan_12 = PhysicalDeviceVulkan12Features::default()
+            // VK_KHR_timeline_semaphore
+            .timeline_semaphore(true)
+            // VK_EXT_descriptor_indexing
+            .shader_input_attachment_array_dynamic_indexing(true)
+            .shader_uniform_texel_buffer_array_dynamic_indexing(true)
+            .shader_storage_texel_buffer_array_dynamic_indexing(true)
+            .shader_uniform_buffer_array_non_uniform_indexing(true)
+            .shader_sampled_image_array_non_uniform_indexing(true)
+            .shader_storage_buffer_array_non_uniform_indexing(true)
+            .shader_storage_image_array_non_uniform_indexing(true)
+            .shader_input_attachment_array_non_uniform_indexing(true)
+            .descriptor_binding_uniform_buffer_update_after_bind(true)
+            .descriptor_binding_sampled_image_update_after_bind(true)
+            .descriptor_binding_storage_image_update_after_bind(true)
+            .descriptor_binding_storage_buffer_update_after_bind(true)
+            .descriptor_binding_uniform_texel_buffer_update_after_bind(true)
+            .descriptor_binding_storage_texel_buffer_update_after_bind(true)
+            .descriptor_binding_update_unused_while_pending(true)
+            .descriptor_binding_partially_bound(true)
+            .descriptor_binding_variable_descriptor_count(true)
+            .runtime_descriptor_array(true)
+            // VK_KHR_buffer_device_address
+            .buffer_device_address(true)
+            // VK_KHR_shader_float16_int8
+            .shader_float16(true)
+            .shader_int8(true);
+        let mut physical_device_features_vulkan_13 = PhysicalDeviceVulkan13Features::default()
+            // VK_KHR_dynamic_rendering
+            .dynamic_rendering(true)
+            // VK_KHR_synchronization2
+            .synchronization2(true)
+            // VK_KHR_shader_integer_dot_product
+            .shader_integer_dot_product(true);
+        let mut physical_device_features_extended_dynamic_state = PhysicalDeviceExtendedDynamicStateFeaturesEXT::default()
+            .extended_dynamic_state(true);
+        let mut physical_device_features_extended_dynamic_state2 = PhysicalDeviceExtendedDynamicState2FeaturesEXT::default()
+            .extended_dynamic_state2(true)
+            .extended_dynamic_state2_logic_op(true)
+            .extended_dynamic_state2_patch_control_points(true);
+        let mut physical_device_features_extended_dynamic_state3 = PhysicalDeviceExtendedDynamicState3FeaturesEXT::default();
+        let ptr = &mut physical_device_features_extended_dynamic_state3 as *mut PhysicalDeviceExtendedDynamicState3FeaturesEXT as *mut Bool32;
+        let count = std::mem::size_of::<PhysicalDeviceExtendedDynamicState3FeaturesEXT>() / std::mem::size_of::<Bool32>();
+        unsafe {
+            for i in 0..count {
+                *ptr.add(i) = TRUE;
+            }
+        }
+        let mut physical_device_features_color_write_enable = PhysicalDeviceColorWriteEnableFeaturesEXT::default()
+            .color_write_enable(true);
+        let logical_device_create_info = DeviceCreateInfo::default()
+            .push_next(&mut physical_device_features_vulkan_12)
+            .push_next(&mut physical_device_features_vulkan_13)
+            .push_next(&mut physical_device_features_extended_dynamic_state)
+            .push_next(&mut physical_device_features_extended_dynamic_state2)
+            .push_next(&mut physical_device_features_extended_dynamic_state3)
+            .push_next(&mut physical_device_features_color_write_enable)
+            .queue_create_infos(logical_device_queue_create_info)
+            .enabled_features(&physical_device_features);
+        unsafe { Arc::new(instance.create_device(*physical_device, &logical_device_create_info, None).expect("Failed to create a Vulkan Device"))}
+    }
+
+    fn find_graphics_queue_family(
+        instance: &Instance,
+        device: &PhysicalDevice
+    ) -> u32 {
+        let queue_family_properties: Vec<QueueFamilyProperties> = unsafe { instance.get_physical_device_queue_family_properties(*device)};
+        queue_family_properties
+            .iter()
+            .position(|q| q.queue_flags.contains(QueueFlags::GRAPHICS))
+            .expect("No Graphics Queue Family with Graphics Support found") as u32
+    }
+
+    
 }
 
 impl Drop for VulkanSetup {
