@@ -32,6 +32,14 @@ symphonia = "0.5.4"
 serde = "1.0.219"
 # Rust Wrapper around MiMalloc (Faster Allocator for some stuff)
 mimalloc = {version = "0.1.47", optional = true}
+# For Lazy Init
+once_cell = "1.21.3"
+# For Windows API
+windows = { version = "0.62.0", features = [
+    "Win32",
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+]}
 
 # Needs OpenGL Wrappers, but I need light ones (glium's too heavy)
 

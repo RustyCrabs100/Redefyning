@@ -12,6 +12,9 @@ mod window;
 #[path = "vulkan.rs"]
 mod vulkan;
 
+#[path = "utils.rs"]
+mod utils;
+
 #[cfg(feature = "mimalloc")]
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
