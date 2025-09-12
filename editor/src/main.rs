@@ -1,7 +1,4 @@
-use redefyning::{
-    init,
-    WindowSettings,
-};
+use redefyning::{WindowSettings, init};
 
 fn main() {
     init(
