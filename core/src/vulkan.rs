@@ -2,72 +2,39 @@
 
 use {
     crate::utils::LINUX_TYPE,
-    std::{
-        num::NonZeroIsize,
-        ffi::{
-            CString,
-            CStr,
-            c_char,
-        },
-        sync::Arc,    
-    },    
     ash::{
+        Device, Entry, Instance,
+        ext::debug_utils,
+        khr::{surface, wayland_surface, win32_surface, xcb_surface},
         prelude::VkResult,
-        Entry,
         vk::{
-            TRUE,
-            FALSE,
-            ApplicationInfo,
-            InstanceCreateInfo,
-            InstanceCreateFlags,
-            make_api_version,
-            DebugUtilsMessengerEXT,
-            PhysicalDevice,
-            QueueFlags,
-            QueueFamilyProperties,
-            DeviceCreateInfo,
-            DeviceQueueCreateInfo,
-            PhysicalDeviceFeatures,
-            PhysicalDeviceVulkan12Features,
-            PhysicalDeviceVulkan13Features,
-            PhysicalDeviceExtendedDynamicStateFeaturesEXT,
+            ApplicationInfo, Bool32, DebugUtilsMessengerEXT, DeviceCreateInfo,
+            DeviceQueueCreateInfo, FALSE, InstanceCreateFlags, InstanceCreateInfo, PhysicalDevice,
+            PhysicalDeviceColorWriteEnableFeaturesEXT,
             PhysicalDeviceExtendedDynamicState2FeaturesEXT,
             PhysicalDeviceExtendedDynamicState3FeaturesEXT,
-            PhysicalDeviceColorWriteEnableFeaturesEXT,
-            Bool32,
-            Queue,
-            SurfaceKHR,
-            Win32SurfaceCreateInfoKHR,
-            XcbSurfaceCreateInfoKHR,
-            WaylandSurfaceCreateInfoKHR,
-        },
-        Instance,
-        ext::debug_utils,
-        Device,
-        khr::{
-            surface,
-            win32_surface,
-            xcb_surface,
-            wayland_surface,
+            PhysicalDeviceExtendedDynamicStateFeaturesEXT, PhysicalDeviceFeatures,
+            PhysicalDeviceVulkan12Features, PhysicalDeviceVulkan13Features, Queue,
+            QueueFamilyProperties, QueueFlags, SurfaceKHR, TRUE, WaylandSurfaceCreateInfoKHR,
+            Win32SurfaceCreateInfoKHR, XcbSurfaceCreateInfoKHR, make_api_version,
         },
     },
-    raw_window_handle::{
-        WindowHandle, 
-        DisplayHandle,
+    raw_window_handle::{DisplayHandle, WindowHandle},
+    std::{
+        ffi::{CStr, CString, c_char},
+        num::NonZeroIsize,
+        sync::Arc,
     },
     windows::Win32::{
         Foundation::HWND,
-        UI::WindowsAndMessaging::{
-            GetWindowLongPtrW,
-            GWLP_HINSTANCE,
-        }    
-    },    
+        UI::WindowsAndMessaging::{GWLP_HINSTANCE, GetWindowLongPtrW},
+    },
 };
 
 macro_rules! str_to_p_const_c_char {
     ($s:expr) => {{
         const BYTES: &[u8] = concat!($s, "\0").as_bytes();
-        const REF_CSTR: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(BYTES)};
+        const REF_CSTR: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(BYTES) };
         REF_CSTR.as_ptr()
     }};
 }
@@ -84,34 +51,29 @@ pub enum SurfaceInstance {
 pub struct VulkanSetup {
     entry: Arc<Entry>,
     instance: Arc<Instance>,
-    //surface_functions: Arc<surface::Instance>,
+    surface_functions: Arc<surface::Instance>,
     //platform_surface_functions: Arc<SurfaceInstance>,
     //surface: Arc<SurfaceKHR>,
     debug_utils_loader: Arc<debug_utils::Instance>,
     debug_messenger: Option<DebugUtilsMessengerEXT>,
     physical_device: Arc<PhysicalDevice>,
-    logical_device: Arc<Device>, 
+    logical_device: Arc<Device>,
     graphics_queue: Arc<Queue>,
-} 
+}
 
 /// Merge all the other impl VulkanSetup's
 impl VulkanSetup {
     pub(crate) fn new(
-        surface_handles: (
-            WindowHandle<'_>, DisplayHandle<'_>
-        ),
+        surface_handles: (WindowHandle<'_>, DisplayHandle<'_>),
         application_name: &str,
         // Variant, Major, Minor, Patch
         application_version: (u32, u32, u32, u32),
     ) -> Result<Self, Box<dyn std::error::Error>> {
         println!("{:#?}", surface_handles);
-        let entry = Arc::new(unsafe{Entry::load()?});
+        let entry = Arc::new(unsafe { Entry::load()? });
         let instance = Self::instance(&entry, application_name, application_version)?;
-        /* 
-        let surface_functions = Arc::new(Self::create_surface_destructor(
-            &entry,
-            &instance,
-        ));
+        let surface_functions = Self::create_surface_destructor(&entry, &instance);
+        /*
         let (platform_surface_functions, surface) = Self::create_surface(
             &entry,
             &instance,
@@ -124,7 +86,8 @@ impl VulkanSetup {
             {
                 Some(debug::vk_setup_debug_messenger(&debug_utils_loader))
             }
-            #[cfg(not(feature = "debug"))] {
+            #[cfg(not(feature = "debug"))]
+            {
                 None
             }
         };
@@ -133,9 +96,10 @@ impl VulkanSetup {
         let graphics_index = Self::find_graphics_queue_family(&instance, &physical_device);
         let graphics_queue = Self::create_graphics_queue(&logical_device, &graphics_index);
         Ok(Self {
-            entry, instance,
-            /*
+            entry,
+            instance,
             surface_functions,
+            /*
             platform_surface_functions,
             surface,
             */
@@ -144,7 +108,7 @@ impl VulkanSetup {
             debug_messenger,
             physical_device,
             logical_device,
-            graphics_queue
+            graphics_queue,
         })
     }
 }
@@ -160,7 +124,8 @@ impl VulkanSetup {
         let layer_names: &[*const c_char] = &Self::instance_layers(entry);
         let ext_names: &[*const c_char] = &Self::instance_extensions(entry);
         let (v, ma, mi, p) = application_version;
-        let app_name = CString::new(application_name).expect("Unable to make a CString out of this &str");
+        let app_name =
+            CString::new(application_name).expect("Unable to make a CString out of this &str");
         let app_info = ApplicationInfo::default()
             .application_name(&app_name)
             .application_version(make_api_version(v, ma, mi, p))
@@ -173,13 +138,15 @@ impl VulkanSetup {
             .application_info(&app_info)
             .enabled_layer_names(layer_names)
             .enabled_extension_names(ext_names);
-        Ok(unsafe { entry.create_instance(&inst_create_info, None)?.into()})
+        Ok(unsafe { entry.create_instance(&inst_create_info, None)?.into() })
     }
 
     fn instance_extensions(entry: &Entry) -> Vec<*const c_char> {
-        let extensions = unsafe { entry
-            .enumerate_instance_extension_properties(None)
-            .expect("Failed to enumerate instance extensions")};
+        let extensions = unsafe {
+            entry
+                .enumerate_instance_extension_properties(None)
+                .expect("Failed to enumerate instance extensions")
+        };
         #[cfg(feature = "debug")]
         let cstrings: Vec<CString> = extensions
             .iter()
@@ -195,9 +162,11 @@ impl VulkanSetup {
     }
 
     fn instance_layers(entry: &Entry) -> Vec<*const c_char> {
-        let layers = unsafe { entry
-            .enumerate_instance_layer_properties()
-            .expect("Failed to enumerate instance layers")};
+        let layers = unsafe {
+            entry
+                .enumerate_instance_layer_properties()
+                .expect("Failed to enumerate instance layers")
+        };
         let cstrings: Vec<CString> = layers
             .iter()
             .map(|layer| {
@@ -260,10 +229,8 @@ impl VulkanSetup {
         str_to_p_const_c_char!("VK_KHR_create_renderpass2"),
     ];
 
-    fn pick_physical_device(
-        instance: &Instance,
-    ) -> Arc<PhysicalDevice> {
-        let devices = unsafe { instance.enumerate_physical_devices().unwrap()};
+    fn pick_physical_device(instance: &Instance) -> Arc<PhysicalDevice> {
+        let devices = unsafe { instance.enumerate_physical_devices().unwrap() };
         if devices.is_empty() {
             panic!("Failed to find GPUs with Vulkan Support");
         }
@@ -287,25 +254,19 @@ impl VulkanSetup {
                     })
                 });
             }).expect("No suitable GPU found");
-        Arc::new(physical_device)    
+        Arc::new(physical_device)
     }
 
-    fn create_logical_device(
-        instance: &Instance,
-        physical_device: &PhysicalDevice,
-    ) -> Arc<Device> {
+    fn create_logical_device(instance: &Instance, physical_device: &PhysicalDevice) -> Arc<Device> {
         let priorities: &[f32] = &[0.0];
-        let graphics_index = Self::find_graphics_queue_family(
-            instance,
-            physical_device
-        );   
-        let queue_family_properties = unsafe { instance.get_physical_device_queue_family_properties(*physical_device)};
+        let graphics_index = Self::find_graphics_queue_family(instance, physical_device);
+        let queue_family_properties =
+            unsafe { instance.get_physical_device_queue_family_properties(*physical_device) };
         let logical_device_queue_create_info = &[DeviceQueueCreateInfo::default()
             .queue_family_index(graphics_index)
             .queue_priorities(priorities)];
-        let physical_device_features: PhysicalDeviceFeatures = unsafe {
-            instance.get_physical_device_features(*physical_device)
-        }; 
+        let physical_device_features: PhysicalDeviceFeatures =
+            unsafe { instance.get_physical_device_features(*physical_device) };
         let mut physical_device_features_vulkan_12 = PhysicalDeviceVulkan12Features::default()
             // VK_KHR_timeline_semaphore
             .timeline_semaphore(true)
@@ -340,46 +301,48 @@ impl VulkanSetup {
             .synchronization2(true)
             // VK_KHR_shader_integer_dot_product
             .shader_integer_dot_product(true);
-        let mut physical_device_features_extended_dynamic_state = PhysicalDeviceExtendedDynamicStateFeaturesEXT::default()
-            .extended_dynamic_state(true);
-        let mut physical_device_features_extended_dynamic_state2 = PhysicalDeviceExtendedDynamicState2FeaturesEXT::default()
-            .extended_dynamic_state2(true)
-            .extended_dynamic_state2_logic_op(true)
-            .extended_dynamic_state2_patch_control_points(true);
-        let mut physical_device_features_extended_dynamic_state3 = PhysicalDeviceExtendedDynamicState3FeaturesEXT::default()
-            .extended_dynamic_state3_tessellation_domain_origin(true)
-            .extended_dynamic_state3_depth_clamp_enable(true)
-            .extended_dynamic_state3_polygon_mode(true)
-            .extended_dynamic_state3_rasterization_samples(true)
-            .extended_dynamic_state3_sample_mask(true)
-            .extended_dynamic_state3_alpha_to_coverage_enable(true)
-            .extended_dynamic_state3_alpha_to_one_enable(true)
-            .extended_dynamic_state3_logic_op_enable(true)
-            .extended_dynamic_state3_color_blend_enable(true)
-            .extended_dynamic_state3_color_blend_equation(true)
-            .extended_dynamic_state3_color_write_mask(true)
-            .extended_dynamic_state3_rasterization_stream(true)
-            .extended_dynamic_state3_conservative_rasterization_mode(true)
-            .extended_dynamic_state3_extra_primitive_overestimation_size(true)
-            .extended_dynamic_state3_depth_clip_enable(true)
-            .extended_dynamic_state3_sample_locations_enable(true)
-            .extended_dynamic_state3_color_blend_advanced(true)
-            .extended_dynamic_state3_provoking_vertex_mode(true)
-            .extended_dynamic_state3_line_rasterization_mode(true)
-            .extended_dynamic_state3_line_stipple_enable(true)
-            .extended_dynamic_state3_depth_clip_negative_one_to_one(true)
-            .extended_dynamic_state3_viewport_w_scaling_enable(true)
-            .extended_dynamic_state3_viewport_swizzle(true)
-            .extended_dynamic_state3_coverage_to_color_enable(true)
-            .extended_dynamic_state3_coverage_to_color_location(true)
-            .extended_dynamic_state3_coverage_modulation_mode(true)
-            .extended_dynamic_state3_coverage_modulation_table_enable(true)
-            .extended_dynamic_state3_coverage_modulation_table(true)
-            .extended_dynamic_state3_coverage_reduction_mode(true)
-            .extended_dynamic_state3_representative_fragment_test_enable(true)
-            .extended_dynamic_state3_shading_rate_image_enable(true);
-        let mut physical_device_features_color_write_enable = PhysicalDeviceColorWriteEnableFeaturesEXT::default()
-            .color_write_enable(true);
+        let mut physical_device_features_extended_dynamic_state =
+            PhysicalDeviceExtendedDynamicStateFeaturesEXT::default().extended_dynamic_state(true);
+        let mut physical_device_features_extended_dynamic_state2 =
+            PhysicalDeviceExtendedDynamicState2FeaturesEXT::default()
+                .extended_dynamic_state2(true)
+                .extended_dynamic_state2_logic_op(true)
+                .extended_dynamic_state2_patch_control_points(true);
+        let mut physical_device_features_extended_dynamic_state3 =
+            PhysicalDeviceExtendedDynamicState3FeaturesEXT::default()
+                .extended_dynamic_state3_tessellation_domain_origin(true)
+                .extended_dynamic_state3_depth_clamp_enable(true)
+                .extended_dynamic_state3_polygon_mode(true)
+                .extended_dynamic_state3_rasterization_samples(true)
+                .extended_dynamic_state3_sample_mask(true)
+                .extended_dynamic_state3_alpha_to_coverage_enable(true)
+                .extended_dynamic_state3_alpha_to_one_enable(true)
+                .extended_dynamic_state3_logic_op_enable(true)
+                .extended_dynamic_state3_color_blend_enable(true)
+                .extended_dynamic_state3_color_blend_equation(true)
+                .extended_dynamic_state3_color_write_mask(true)
+                .extended_dynamic_state3_rasterization_stream(true)
+                .extended_dynamic_state3_conservative_rasterization_mode(true)
+                .extended_dynamic_state3_extra_primitive_overestimation_size(true)
+                .extended_dynamic_state3_depth_clip_enable(true)
+                .extended_dynamic_state3_sample_locations_enable(true)
+                .extended_dynamic_state3_color_blend_advanced(true)
+                .extended_dynamic_state3_provoking_vertex_mode(true)
+                .extended_dynamic_state3_line_rasterization_mode(true)
+                .extended_dynamic_state3_line_stipple_enable(true)
+                .extended_dynamic_state3_depth_clip_negative_one_to_one(true)
+                .extended_dynamic_state3_viewport_w_scaling_enable(true)
+                .extended_dynamic_state3_viewport_swizzle(true)
+                .extended_dynamic_state3_coverage_to_color_enable(true)
+                .extended_dynamic_state3_coverage_to_color_location(true)
+                .extended_dynamic_state3_coverage_modulation_mode(true)
+                .extended_dynamic_state3_coverage_modulation_table_enable(true)
+                .extended_dynamic_state3_coverage_modulation_table(true)
+                .extended_dynamic_state3_coverage_reduction_mode(true)
+                .extended_dynamic_state3_representative_fragment_test_enable(true)
+                .extended_dynamic_state3_shading_rate_image_enable(true);
+        let mut physical_device_features_color_write_enable =
+            PhysicalDeviceColorWriteEnableFeaturesEXT::default().color_write_enable(true);
         let logical_device_create_info = DeviceCreateInfo::default()
             .push_next(&mut physical_device_features_vulkan_12)
             .push_next(&mut physical_device_features_vulkan_13)
@@ -389,139 +352,35 @@ impl VulkanSetup {
             .push_next(&mut physical_device_features_color_write_enable)
             .queue_create_infos(logical_device_queue_create_info)
             .enabled_features(&physical_device_features);
-        unsafe { Arc::new(instance.create_device(*physical_device, &logical_device_create_info, None).expect("Failed to create a Vulkan Device"))}
+        unsafe {
+            Arc::new(
+                instance
+                    .create_device(*physical_device, &logical_device_create_info, None)
+                    .expect("Failed to create a Vulkan Device"),
+            )
+        }
     }
 
-    fn create_graphics_queue(
-        device: &Device,
-        graphics_index: &u32
-    ) -> Arc<Queue> {
-        return Arc::new(unsafe {device.get_device_queue(*graphics_index, 0)});
+    fn create_graphics_queue(device: &Device, graphics_index: &u32) -> Arc<Queue> {
+        return Arc::new(unsafe { device.get_device_queue(*graphics_index, 0) });
     }
 
-    fn find_graphics_queue_family(
-        instance: &Instance,
-        device: &PhysicalDevice
-    ) -> u32 {
-        let queue_family_properties: Vec<QueueFamilyProperties> = unsafe { instance.get_physical_device_queue_family_properties(*device)};
+    fn find_graphics_queue_family(instance: &Instance, device: &PhysicalDevice) -> u32 {
+        let queue_family_properties: Vec<QueueFamilyProperties> =
+            unsafe { instance.get_physical_device_queue_family_properties(*device) };
         queue_family_properties
             .iter()
             .position(|q| q.queue_flags.contains(QueueFlags::GRAPHICS))
             .expect("No Graphics Queue Family with Graphics Support found") as u32
     }
 }
-/*
+
 /// Vulkan Surface + Swapchain
 impl VulkanSetup {
-    fn create_surface_destructor(
-        entry: &Entry,
-        instance: &Instance,
-    ) -> surface::Instance {
-        surface::Instance::new(
-            entry,
-            instance,
-        )
+    fn create_surface_destructor(entry: &Entry, instance: &Instance) -> Arc<surface::Instance> {
+        Arc::new(surface::Instance::new(entry, instance))
     }
-
-    fn create_surface(
-        entry: &Entry,
-        instance: &Instance,
-        surface_handles: (
-            WindowHandle<'_>, DisplayHandle<'_>
-        )
-    ) -> (Arc<SurfaceInstance>, Arc<SurfaceKHR>) {
-        {
-            if *LINUX_TYPE == "Not Linux" {
-                return Self::create_win32_surface(
-                    entry,
-                    instance,
-                    surface_handles
-                );
-            }
-            if *LINUX_TYPE != "Not Linux" {
-                match LINUX_TYPE {
-                    "x11" => return Self::create_xcb_surface(
-                        entry,
-                        instance,
-                        surface_handles
-                    ),
-                    "wayland" => return Self::create_wayland_surface(
-                        entry,
-                        instance,
-                        surface_handles
-                    ),
-                    "Not Linux" => panic!("How do you even get here????"),
-                }
-            };
-            panic!("Your OS is not Supported here. We only Support Windows and Linux (X11 or Wayland)");
-        }
-    }
-
-    fn create_win32_surface(
-        entry: &Entry,
-        instance: &Instance,
-        surface_handles: (
-            WindowHandle<'_>, DisplayHandle<'_>
-        ),
-    ) -> (Arc<SurfaceInstance>, Arc<SurfaceKHR>) {
-        if *LINUX_TYPE != "Not Linux" {
-            panic!("Win32 Surface Creation Called, but not in a Windows Session."
-            )
-        }
-        let window: HWND = Default::default();
-        let mut handle = raw_window_handle::Win32WindowHandle::new(NonZeroIsize::new(window.0 as isize).expect("HWND was Null."));
-        let hinstance = NonZeroIsize::new( unsafe { GetWindowLongPtrW(
-            window,
-            GWLP_HINSTANCE,
-        )}).unwrap();
-        handle.hinstance = Some(hinstance);
-        let surface_create_info = Win32SurfaceCreateInfoKHR::default()
-            .hwnd(handle.hwnd.into())
-            .hinstance(handle.hinstance.unwrap().into());
-
-        let surface_instance = win32_surface::Instance::new(
-            entry,
-            instance,
-        );
-
-        let win32_surface_item = unsafe { surface_instance.create_win32_surface(
-            &surface_create_info,
-            None
-        ).expect("Unable to create Win32 Surface")};
-
-        (
-            Arc::new(SurfaceInstance::Win32(surface_instance)),
-            Arc::new(win32_surface_item),
-        )
-    }
-
-    fn create_xcb_surface(
-        entry: &Entry,
-        instance: &Instance,
-        surface_handles: (
-            WindowHandle<'_>, DisplayHandle<'_>
-        ),
-    ) -> (Arc<SurfaceInstance>, Arc<SurfaceKHR>) {
-        if *LINUX_TYPE != "x11" {
-            panic!("XCB Surface Creation Called, but not in an X11 Session.")
-        }
-        todo!()
-    }
-
-    fn create_wayland_surface(
-        entry: &Entry,
-        instance: &Instance,
-        surface_handles: (
-            WindowHandle<'_>, DisplayHandle<'_>
-        )
-    ) -> (Arc<SurfaceInstance>, Arc<SurfaceKHR>) {
-        if *LINUX_TYPE != "wayland" {
-            panic!("Wayland Surface Creation Called, but not in Wayland Session.")
-        }
-        todo!()
-    }
-}   
-*/
+}
 
 impl Drop for VulkanSetup {
     // Drop everything in Order in this, or else there's going to be segmentation faults.
@@ -529,7 +388,8 @@ impl Drop for VulkanSetup {
         unsafe {
             self.logical_device.destroy_device(None);
             if let Some(x) = self.debug_messenger {
-                self.debug_utils_loader.destroy_debug_utils_messenger(x, None);
+                self.debug_utils_loader
+                    .destroy_debug_utils_messenger(x, None);
             }
             // Last Line, nothing comes after this (for your own good)
             self.instance.destroy_instance(None);
