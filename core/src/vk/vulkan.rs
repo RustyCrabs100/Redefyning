@@ -1,43 +1,31 @@
 #![cfg(feature = "vulkan")]
 
 use {
-    crate::utils::LINUX_TYPE,
+    crate::{str_to_p_const_c_char, utils::AppState},
     ash::{
         Device, Entry, Instance,
         ext::debug_utils,
         khr::{surface, wayland_surface, win32_surface, xcb_surface},
         prelude::VkResult,
         vk::{
-            ApplicationInfo, Bool32, DebugUtilsMessengerEXT, DeviceCreateInfo,
-            DeviceQueueCreateInfo, FALSE, InstanceCreateFlags, InstanceCreateInfo, PhysicalDevice,
+            ApplicationInfo, DebugUtilsMessengerEXT, DeviceCreateInfo, DeviceQueueCreateInfo,
+            InstanceCreateFlags, InstanceCreateInfo, PhysicalDevice,
             PhysicalDeviceColorWriteEnableFeaturesEXT,
             PhysicalDeviceExtendedDynamicState2FeaturesEXT,
             PhysicalDeviceExtendedDynamicState3FeaturesEXT,
             PhysicalDeviceExtendedDynamicStateFeaturesEXT, PhysicalDeviceFeatures,
             PhysicalDeviceVulkan12Features, PhysicalDeviceVulkan13Features, Queue,
-            QueueFamilyProperties, QueueFlags, SurfaceKHR, TRUE, WaylandSurfaceCreateInfoKHR,
+            QueueFamilyProperties, QueueFlags, SurfaceKHR, WaylandSurfaceCreateInfoKHR,
             Win32SurfaceCreateInfoKHR, XcbSurfaceCreateInfoKHR, make_api_version,
         },
     },
-    raw_window_handle::{DisplayHandle, WindowHandle},
+    ash_window,
+    raw_window_handle::{RawDisplayHandle, RawWindowHandle},
     std::{
         ffi::{CStr, CString, c_char},
-        num::NonZeroIsize,
-        sync::Arc,
-    },
-    windows::Win32::{
-        Foundation::HWND,
-        UI::WindowsAndMessaging::{GWLP_HINSTANCE, GetWindowLongPtrW},
+        sync::{Arc, mpsc::Receiver},
     },
 };
-
-macro_rules! str_to_p_const_c_char {
-    ($s:expr) => {{
-        const BYTES: &[u8] = concat!($s, "\0").as_bytes();
-        const REF_CSTR: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(BYTES) };
-        REF_CSTR.as_ptr()
-    }};
-}
 
 #[path = "debug_vk.rs"]
 mod debug;
@@ -49,11 +37,12 @@ pub enum SurfaceInstance {
 }
 
 pub struct VulkanSetup {
+    window_communicator: Option<Receiver<AppState>>,
     entry: Arc<Entry>,
     instance: Arc<Instance>,
     surface_functions: Arc<surface::Instance>,
     //platform_surface_functions: Arc<SurfaceInstance>,
-    //surface: Arc<SurfaceKHR>,
+    surface: Arc<SurfaceKHR>,
     debug_utils_loader: Arc<debug_utils::Instance>,
     debug_messenger: Option<DebugUtilsMessengerEXT>,
     physical_device: Arc<PhysicalDevice>,
@@ -63,23 +52,21 @@ pub struct VulkanSetup {
 
 /// Merge all the other impl VulkanSetup's
 impl VulkanSetup {
+    pub fn init_window_communicator(&mut self, communicator: Receiver<AppState>) {
+        self.window_communicator = Some(communicator);
+    }
+
     pub(crate) fn new(
-        surface_handles: (WindowHandle<'_>, DisplayHandle<'_>),
+        window_handles: (RawDisplayHandle, RawWindowHandle),
         application_name: &str,
         // Variant, Major, Minor, Patch
         application_version: (u32, u32, u32, u32),
     ) -> Result<Self, Box<dyn std::error::Error>> {
-        println!("{:#?}", surface_handles);
+        println!("Loading Vulkan");
         let entry = Arc::new(unsafe { Entry::load()? });
         let instance = Self::instance(&entry, application_name, application_version)?;
         let surface_functions = Self::create_surface_destructor(&entry, &instance);
-        /*
-        let (platform_surface_functions, surface) = Self::create_surface(
-            &entry,
-            &instance,
-            surface_handles,
-        );
-        */
+        let surface = Self::create_surface(&entry, &instance, window_handles);
         let debug_utils_loader = Arc::new(debug_utils::Instance::new(&entry, &instance));
         let debug_messenger = {
             #[cfg(feature = "debug")]
@@ -95,14 +82,14 @@ impl VulkanSetup {
         let logical_device = Self::create_logical_device(&instance, &physical_device);
         let graphics_index = Self::find_graphics_queue_family(&instance, &physical_device);
         let graphics_queue = Self::create_graphics_queue(&logical_device, &graphics_index);
+        println!("Finished loading Vulkan");
         Ok(Self {
+            window_communicator: None,
             entry,
             instance,
             surface_functions,
-            /*
-            platform_surface_functions,
+            // platform_surface_functions
             surface,
-            */
             debug_utils_loader,
             #[cfg(feature = "debug")]
             debug_messenger,
@@ -380,12 +367,24 @@ impl VulkanSetup {
     fn create_surface_destructor(entry: &Entry, instance: &Instance) -> Arc<surface::Instance> {
         Arc::new(surface::Instance::new(entry, instance))
     }
+
+    fn create_surface(
+        entry: &Entry,
+        instance: &Instance,
+        raw_handles: (RawDisplayHandle, RawWindowHandle),
+    ) -> Arc<SurfaceKHR> {
+        Arc::new(unsafe {
+            ash_window::create_surface(entry, instance, raw_handles.0, raw_handles.1, None)
+                .expect("Failed to create Vulkan Surface")
+        })
+    }
 }
 
 impl Drop for VulkanSetup {
     // Drop everything in Order in this, or else there's going to be segmentation faults.
     fn drop(&mut self) {
         unsafe {
+            self.surface_functions.destroy_surface(*self.surface, None);
             self.logical_device.destroy_device(None);
             if let Some(x) = self.debug_messenger {
                 self.debug_utils_loader

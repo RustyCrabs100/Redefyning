@@ -4,42 +4,52 @@ version = "0.0.0"
 edition = "2024"
 
 [dependencies]
-# Rust Vulkan Wrappers
-ash = {version = "0.38.0", optional = true}
-# Low Level Audio Handler
-cpal = "0.16.0"
-# UI
-egui = "0.32.1"
-# Basic Windowing + Input
-minifb = "0.28.0"
-# Raw Window Handle Creator
+# Visuals
+##  Windowing & Full Input Support
+winit = "0.30.12"
+## UI
+egui = "0.33.0"
+# Rendering
+## Rust Vulkan Wrappers
+ash = { version = "0.38.0", optional = true }
+## Vulkan Surface Creation
+ash-window = "0.13.0"
+## Raw Window Handle Creator
 raw-window-handle = "=0.6.2"
+# Audio
+## Low Level Audio I/O
+cpal = "0.16.0"
+## Audio Modifier + Sound Generator
+fundsp = "0.20.0"
+## Audio Decoder
+symphonia = "0.5.4"
 # Math
+## Math
 glam = "0.30.5"
 # Error Handling
-error-stack = "0.5.0"
-# Image Loader/Handler
+## Error Info Collection (Report)
+error-stack = "0.6.0"
+# Asset Loading
+## Image Loader/Handler
 image = "0.25.6"
-# .blend File Loader/Handler
-blend = {version = "0.8.0", optional = true}
-# .gltf (JSON + External Buffers) & .glb (binary) File Loader/Handler
+## .blend File Loader/Handler
+blend = { version = "0.8.0", optional = true }
+## .gltf (JSON + External Buffers) & .glb (binary) File Loader/Handler
 gltf = "1.4.1"
-# Safe-ish Type Conversions
+# Type Conversions
+## Safe-ish Type Conversions
 bytemuck = "1.23.2"
-# Audio Decoder
-symphonia = "0.5.4"
-# Serialize/Deserialize
+# Serializing & Deserializing
+## Serialize/Deserialize
 serde = "1.0.219"
-# Rust Wrapper around MiMalloc (Faster Allocator for some stuff)
-mimalloc = {version = "0.1.47", optional = true}
-# For Lazy Init
-once_cell = "1.21.3"
-# For Windows API
-windows = { version = "0.62.0", features = [
-    "Win32",
-    "Win32_Foundation",
-    "Win32_UI_WindowsAndMessaging",
-]}
+# Allocators
+## Rust Wrapper around MiMalloc (Faster Allocator for some stuff)
+mimalloc = { version = "0.1.47", optional = true }
+# Async
+## Async Runtimes + Utilities
+tokio = { version = "1.48.0", features = ["full"] }
+futures = "0.3.31"
+
 
 # Needs OpenGL Wrappers, but I need light ones (glium's too heavy)
 
@@ -56,3 +66,5 @@ vulkan = ["dep:ash"]
 blend_usage = ["dep:blend"]
 # Sets the Global Allocator to MiMalloc
 mimalloc = ["dep:mimalloc"]
+# Set the Framework to App Mode (UI Thread, winit::ControlFlow::Wait, etc)
+app_mode = []

@@ -23,7 +23,7 @@ unsafe extern "system" fn vk_debug_callback(
     validation_type: vk::DebugUtilsMessageTypeFlagsEXT,
     p_callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT,
     _: *mut c_void
-) -> vk::Bool32 {
+) -> vk::Bool32 { unsafe {
     match severity {
         vk::DebugUtilsMessageSeverityFlagsEXT::VERBOSE => return vk::FALSE,
         vk::DebugUtilsMessageSeverityFlagsEXT::INFO => return vk::FALSE,
@@ -40,7 +40,7 @@ unsafe extern "system" fn vk_debug_callback(
 
 
     return vk::FALSE;
-}
+}}
 
 pub(crate) fn vk_setup_debug_messenger(
     debug_utils_loader: &ash::ext::debug_utils::Instance

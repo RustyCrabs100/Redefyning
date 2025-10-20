@@ -3,3 +3,5 @@ Cargo.lock
 *.pdb
 *.gfxr
 *.foz
+# I use this to view outputs whenever I want a closer look
+output.txt
