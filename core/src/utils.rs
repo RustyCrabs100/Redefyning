@@ -13,20 +13,20 @@ pub enum AppState {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct RawWindowingHandles {
+pub(crate) struct RawWindowingHandles {
     window: RawWindowHandle,
     display: RawDisplayHandle,
 }
 
 impl RawWindowingHandles {
-    pub fn from_raw_tuple(raw: &(RawDisplayHandle, RawWindowHandle)) -> Self {
+    pub(crate) fn from_raw_tuple(raw: &(RawDisplayHandle, RawWindowHandle)) -> Self {
         Self {
             window: raw.1,
             display: raw.0,
         }
     }
 
-    pub fn unpack(self) -> (RawDisplayHandle, RawWindowHandle) {
+    pub(crate) fn unpack(self) -> (RawDisplayHandle, RawWindowHandle) {
         (self.display, self.window)
     }
 }

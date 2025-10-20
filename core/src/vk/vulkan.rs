@@ -7,15 +7,16 @@ use {
         ext::debug_utils,
         khr::{surface, wayland_surface, win32_surface, xcb_surface},
         prelude::VkResult,
+        vk,
         vk::{
             ApplicationInfo, DebugUtilsMessengerEXT, DeviceCreateInfo, DeviceQueueCreateInfo,
-            InstanceCreateFlags, InstanceCreateInfo, PhysicalDevice,
+            FALSE, InstanceCreateFlags, InstanceCreateInfo, PhysicalDevice,
             PhysicalDeviceColorWriteEnableFeaturesEXT,
             PhysicalDeviceExtendedDynamicState2FeaturesEXT,
             PhysicalDeviceExtendedDynamicState3FeaturesEXT,
             PhysicalDeviceExtendedDynamicStateFeaturesEXT, PhysicalDeviceFeatures,
             PhysicalDeviceVulkan12Features, PhysicalDeviceVulkan13Features, Queue,
-            QueueFamilyProperties, QueueFlags, SurfaceKHR, WaylandSurfaceCreateInfoKHR,
+            QueueFamilyProperties, QueueFlags, SurfaceKHR, TRUE, WaylandSurfaceCreateInfoKHR,
             Win32SurfaceCreateInfoKHR, XcbSurfaceCreateInfoKHR, make_api_version,
         },
     },
@@ -41,7 +42,6 @@ pub struct VulkanSetup {
     entry: Arc<Entry>,
     instance: Arc<Instance>,
     surface_functions: Arc<surface::Instance>,
-    //platform_surface_functions: Arc<SurfaceInstance>,
     surface: Arc<SurfaceKHR>,
     debug_utils_loader: Arc<debug_utils::Instance>,
     debug_messenger: Option<DebugUtilsMessengerEXT>,
@@ -52,7 +52,7 @@ pub struct VulkanSetup {
 
 /// Merge all the other impl VulkanSetup's
 impl VulkanSetup {
-    pub fn init_window_communicator(&mut self, communicator: Receiver<AppState>) {
+    pub(crate) fn init_window_communicator(&mut self, communicator: Receiver<AppState>) {
         self.window_communicator = Some(communicator);
     }
 
@@ -63,7 +63,9 @@ impl VulkanSetup {
         application_version: (u32, u32, u32, u32),
     ) -> Result<Self, Box<dyn std::error::Error>> {
         println!("Loading Vulkan");
+        // Create the Entry Point of Vulkan
         let entry = Arc::new(unsafe { Entry::load()? });
+        // Create the vulkan instance
         let instance = Self::instance(&entry, application_name, application_version)?;
         let surface_functions = Self::create_surface_destructor(&entry, &instance);
         let surface = Self::create_surface(&entry, &instance, window_handles);
@@ -79,7 +81,8 @@ impl VulkanSetup {
             }
         };
         let physical_device = Self::pick_physical_device(&instance);
-        let logical_device = Self::create_logical_device(&instance, &physical_device);
+        let logical_device =
+            Self::create_logical_device(&instance, &physical_device, &surface_functions, &surface);
         let graphics_index = Self::find_graphics_queue_family(&instance, &physical_device);
         let graphics_queue = Self::create_graphics_queue(&logical_device, &graphics_index);
         println!("Finished loading Vulkan");
@@ -217,43 +220,83 @@ impl VulkanSetup {
     ];
 
     fn pick_physical_device(instance: &Instance) -> Arc<PhysicalDevice> {
+        // Collect all viable PhysicalDevice's
         let devices = unsafe { instance.enumerate_physical_devices().unwrap() };
+        // Panic if no device was found
         if devices.is_empty() {
             panic!("Failed to find GPUs with Vulkan Support");
         }
-        let physical_device = devices.into_iter()
-            .find( |&device| unsafe {
+        // Iterates over all avaliable devices and searches for a good one.
+        // Panics if No PhysicalDevice was found
+        let physical_device = devices
+            .into_iter()
+            .find(|&device| unsafe {
+                // Collect Device Properties
                 let props = instance.get_physical_device_properties(device);
+                // Skip this Device if the Vulkan version is less than 1.3.286.0
                 if props.api_version < make_api_version(0, 1, 3, 286) {
-                    panic!(
-                        "Your Vulkan API Version is not supported. Your current API version: {}, needed API version: {}",
-                        props.api_version, make_api_version(0, 1, 3, 286)
-                    );
+                    return false;
                 }
+                // Collect Queue Families
                 let queue_families = instance.get_physical_device_queue_family_properties(device);
-                if !(queue_families.iter().any(|qf| qf.queue_flags.contains(QueueFlags::GRAPHICS))) {
-                    panic!("No queue family supports Graphics");
+                // Skip this Device if the queue doesn't support Graphics
+                if !(queue_families
+                    .iter()
+                    .any(|qf| qf.queue_flags.contains(QueueFlags::GRAPHICS)))
+                {
+                    return false;
                 }
-                let extensions = instance.enumerate_device_extension_properties(device).unwrap();
+                // Collect Device Extensions
+                let extensions = instance
+                    .enumerate_device_extension_properties(device)
+                    .unwrap();
+                // Iterate over all the device's extensions.
+                // If the device contains all required extensions, it passes.
                 return Self::REQUIRED_DEVICE_EXTENSIONS.iter().all(|&req| {
                     extensions.iter().any(|ext| {
                         CStr::from_ptr(ext.extension_name.as_ptr()) == CStr::from_ptr(req)
                     })
                 });
-            }).expect("No suitable GPU found");
+            })
+            .expect("No suitable GPU found");
         Arc::new(physical_device)
     }
 
-    fn create_logical_device(instance: &Instance, physical_device: &PhysicalDevice) -> Arc<Device> {
+    /*
+    TODO: Fix this code so that it doesn't panic when the graphics queue doesn't support surface presenting
+    Do this by checking if it supports both, and if not, check a different queue.
+     */
+    fn create_logical_device(
+        instance: &Instance,
+        physical_device: &PhysicalDevice,
+        surface_functions: &surface::Instance,
+        surface: &SurfaceKHR,
+    ) -> Arc<Device> {
+        // Creates Queue Priorities
         let priorities: &[f32] = &[0.0];
+        // Collect the Queue with the Graphics Queue
         let graphics_index = Self::find_graphics_queue_family(instance, physical_device);
+        // See if the physical device supports Surface Presentation
+        let present_support = unsafe {
+            surface_functions
+                .get_physical_device_surface_support(*physical_device, graphics_index, *surface)
+                .expect("Failed to query surface support")
+        };
+        // Panic if the physical device does not support Surface presentation
+        if present_support != true {
+            panic!("Selected queue family does not support presentation")
+        }
+        // Collect the physical device's queue family properties.
         let queue_family_properties =
             unsafe { instance.get_physical_device_queue_family_properties(*physical_device) };
+        // Create the Logical Device's Queue Info
         let logical_device_queue_create_info = &[DeviceQueueCreateInfo::default()
             .queue_family_index(graphics_index)
             .queue_priorities(priorities)];
+        // Get the physical device features
         let physical_device_features: PhysicalDeviceFeatures =
             unsafe { instance.get_physical_device_features(*physical_device) };
+        // Collect all good physical device features from Vulkan 1.2
         let mut physical_device_features_vulkan_12 = PhysicalDeviceVulkan12Features::default()
             // VK_KHR_timeline_semaphore
             .timeline_semaphore(true)
@@ -281,6 +324,7 @@ impl VulkanSetup {
             // VK_KHR_shader_float16_int8
             .shader_float16(true)
             .shader_int8(true);
+        // Collect all good physical device features from Vulkan 1.3
         let mut physical_device_features_vulkan_13 = PhysicalDeviceVulkan13Features::default()
             // VK_KHR_dynamic_rendering
             .dynamic_rendering(true)
@@ -288,13 +332,16 @@ impl VulkanSetup {
             .synchronization2(true)
             // VK_KHR_shader_integer_dot_product
             .shader_integer_dot_product(true);
+        // Collect all good physical device features for Extended Dynamic State
         let mut physical_device_features_extended_dynamic_state =
             PhysicalDeviceExtendedDynamicStateFeaturesEXT::default().extended_dynamic_state(true);
+        // Collect all good physical device features for Extended Dynamic State 2
         let mut physical_device_features_extended_dynamic_state2 =
             PhysicalDeviceExtendedDynamicState2FeaturesEXT::default()
                 .extended_dynamic_state2(true)
                 .extended_dynamic_state2_logic_op(true)
                 .extended_dynamic_state2_patch_control_points(true);
+        // Collect all good physical device features for Extended Dynamic State 3
         let mut physical_device_features_extended_dynamic_state3 =
             PhysicalDeviceExtendedDynamicState3FeaturesEXT::default()
                 .extended_dynamic_state3_tessellation_domain_origin(true)
@@ -328,8 +375,10 @@ impl VulkanSetup {
                 .extended_dynamic_state3_coverage_reduction_mode(true)
                 .extended_dynamic_state3_representative_fragment_test_enable(true)
                 .extended_dynamic_state3_shading_rate_image_enable(true);
+        // Enable the Device Feature for Color Writing
         let mut physical_device_features_color_write_enable =
             PhysicalDeviceColorWriteEnableFeaturesEXT::default().color_write_enable(true);
+        // Create the Logical Device's info with all of the features inputed
         let logical_device_create_info = DeviceCreateInfo::default()
             .push_next(&mut physical_device_features_vulkan_12)
             .push_next(&mut physical_device_features_vulkan_13)
@@ -339,6 +388,7 @@ impl VulkanSetup {
             .push_next(&mut physical_device_features_color_write_enable)
             .queue_create_infos(logical_device_queue_create_info)
             .enabled_features(&physical_device_features);
+        // Create the Logical Device
         unsafe {
             Arc::new(
                 instance

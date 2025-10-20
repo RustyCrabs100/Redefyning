@@ -25,7 +25,7 @@ fundsp = "0.20.0"
 symphonia = "0.5.4"
 # Math
 ## Math
-glam = "0.30.5"
+glam = "0.30.8"
 # Error Handling
 ## Error Info Collection (Report)
 error-stack = "0.6.0"
