@@ -8,7 +8,8 @@ use {
     crate::utils::{AppState, RawWindowingHandles},
     raw_window_handle::{RawDisplayHandle, RawWindowHandle},
     std::sync::{Arc, Mutex, mpsc::channel},
-    tokio::sync::oneshot,
+    tokio::sync::{mpsc, oneshot},
+    winit::dpi::PhysicalSize,
 };
 
 #[path = "winit.rs"]
@@ -42,6 +43,7 @@ pub fn init(
     }
     let (tx, rx) = channel::<AppState>();
     let (oneshot_tx, oneshot_rx) = oneshot::channel::<RawWindowingHandles>();
+    let (tokio_tx, tokio_rx) = mpsc::channel::<PhysicalSize<u32>>(16);
 
     let mut app_window = Box::new(window::AppWindow::default());
 
@@ -59,14 +61,15 @@ pub fn init(
 
             #[cfg(feature = "vulkan")]
             {
-                let mut vulkan_setup = vk::VulkanSetup::new(surface_handles, app_name, app_version)
-                    .expect("Unable to create Vulkan Setup");
+                let mut vulkan_setup =
+                    vk::VulkanSetup::new(surface_handles, app_name, app_version, tokio_rx)
+                        .expect("Unable to create Vulkan Setup");
                 vulkan_setup.init_window_communicator(rx);
             }
         })());
     });
 
-    app_window.start(oneshot_tx);
+    app_window.start(oneshot_tx, tokio_tx);
 
     // Minifb Code
     /*

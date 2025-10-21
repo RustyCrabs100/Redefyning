@@ -2,9 +2,14 @@ use {
     crate::utils::{AppState, RawWindowingHandles},
     raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle},
     std::{convert::From, ptr::NonNull, sync::mpsc::Sender},
-    tokio::sync::oneshot,
+    tokio::{
+        runtime::Runtime,
+        sync::{mpsc::Sender as TokioSender, oneshot},
+        task,
+    },
     winit::{
         application::ApplicationHandler,
+        dpi::PhysicalSize,
         event::{DeviceEvent, KeyEvent, WindowEvent},
         event_loop::{ActiveEventLoop, ControlFlow, EventLoop},
         keyboard::{KeyCode, PhysicalKey},
@@ -42,6 +47,7 @@ pub struct AppWindow {
     app_state: AppState,
     render_communicator: Option<Sender<AppState>>,
     surface_handles_sender: Option<oneshot::Sender<RawWindowingHandles>>,
+    inner_size_sender: Option<TokioSender<PhysicalSize<u32>>>,
 }
 
 impl AppWindow {
@@ -89,7 +95,11 @@ impl AppWindow {
         self.render_communicator = Some(communicator);
     }
 
-    pub(crate) fn start(&mut self, surface_handles_sender: oneshot::Sender<RawWindowingHandles>) {
+    pub(crate) fn start(
+        &mut self,
+        surface_handles_sender: oneshot::Sender<RawWindowingHandles>,
+        inner_size_sender: TokioSender<PhysicalSize<u32>>,
+    ) {
         let event_loop = EventLoop::<Events>::with_user_event().build().unwrap();
 
         {
@@ -104,6 +114,7 @@ impl AppWindow {
         }
 
         self.surface_handles_sender = Some(surface_handles_sender);
+        self.inner_size_sender = Some(inner_size_sender);
 
         event_loop.run_app(self).expect("Event Loop Eror");
     }
@@ -117,6 +128,12 @@ impl ApplicationHandler<Events> for AppWindow {
         // We know at this point surface_handles_sender is Some()
         let sender = self.surface_handles_sender.take().unwrap();
         sender.send(self.get_surface_handles()).expect("Un oh");
+        let inner_size_sender = self.inner_size_sender.take().unwrap();
+        let size = self.window.as_ref().unwrap().inner_size();
+        task::block_in_place(move || {
+            let rt = Runtime::new().unwrap();
+            rt.block_on((async move || inner_size_sender.send(size).await)())
+        });
     }
 
     fn window_event(
@@ -127,7 +144,9 @@ impl ApplicationHandler<Events> for AppWindow {
     ) {
         match event {
             WindowEvent::CloseRequested => self.exit(event_loop),
-            WindowEvent::RedrawRequested => {}
+            WindowEvent::RedrawRequested => {
+                println!("Requested Redraw")
+            }
             WindowEvent::KeyboardInput { event, .. } => match event.physical_key {
                 PhysicalKey::Code(KeyCode::Escape) => self.exit(event_loop),
                 _ => {}
@@ -146,6 +165,7 @@ impl Default for AppWindow {
             app_state: AppState::default(),
             render_communicator: None,
             surface_handles_sender: None,
+            inner_size_sender: None,
         }
     }
 }

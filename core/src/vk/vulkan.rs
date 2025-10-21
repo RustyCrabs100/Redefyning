@@ -5,19 +5,19 @@ use {
     ash::{
         Device, Entry, Instance,
         ext::debug_utils,
+        khr,
         khr::{surface, wayland_surface, win32_surface, xcb_surface},
         prelude::VkResult,
         vk,
         vk::{
             ApplicationInfo, DebugUtilsMessengerEXT, DeviceCreateInfo, DeviceQueueCreateInfo,
-            FALSE, InstanceCreateFlags, InstanceCreateInfo, PhysicalDevice,
+            InstanceCreateFlags, InstanceCreateInfo, PhysicalDevice,
             PhysicalDeviceColorWriteEnableFeaturesEXT,
             PhysicalDeviceExtendedDynamicState2FeaturesEXT,
             PhysicalDeviceExtendedDynamicState3FeaturesEXT,
             PhysicalDeviceExtendedDynamicStateFeaturesEXT, PhysicalDeviceFeatures,
             PhysicalDeviceVulkan12Features, PhysicalDeviceVulkan13Features, Queue,
-            QueueFamilyProperties, QueueFlags, SurfaceKHR, TRUE, WaylandSurfaceCreateInfoKHR,
-            Win32SurfaceCreateInfoKHR, XcbSurfaceCreateInfoKHR, make_api_version,
+            QueueFamilyProperties, QueueFlags, SurfaceKHR, make_api_version,
         },
     },
     ash_window,
@@ -26,6 +26,8 @@ use {
         ffi::{CStr, CString, c_char},
         sync::{Arc, mpsc::Receiver},
     },
+    tokio::{sync::mpsc::Receiver as TokioReceiver, task},
+    winit::dpi::PhysicalSize,
 };
 
 #[path = "debug_vk.rs"]
@@ -48,6 +50,7 @@ pub struct VulkanSetup {
     physical_device: Arc<PhysicalDevice>,
     logical_device: Arc<Device>,
     graphics_queue: Arc<Queue>,
+    swapchain: Arc<vk::SwapchainKHR>,
 }
 
 /// Merge all the other impl VulkanSetup's
@@ -61,6 +64,7 @@ impl VulkanSetup {
         application_name: &str,
         // Variant, Major, Minor, Patch
         application_version: (u32, u32, u32, u32),
+        inner_size_reciever: TokioReceiver<PhysicalSize<u32>>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         println!("Loading Vulkan");
         // Create the Entry Point of Vulkan
@@ -85,13 +89,20 @@ impl VulkanSetup {
             Self::create_logical_device(&instance, &physical_device, &surface_functions, &surface);
         let graphics_index = Self::find_graphics_queue_family(&instance, &physical_device);
         let graphics_queue = Self::create_graphics_queue(&logical_device, &graphics_index);
+        let swapchain = Self::create_swapchain(
+            &instance,
+            &physical_device,
+            &logical_device,
+            &surface,
+            &surface_functions,
+            inner_size_reciever,
+        );
         println!("Finished loading Vulkan");
         Ok(Self {
             window_communicator: None,
             entry,
             instance,
             surface_functions,
-            // platform_surface_functions
             surface,
             debug_utils_loader,
             #[cfg(feature = "debug")]
@@ -99,6 +110,7 @@ impl VulkanSetup {
             physical_device,
             logical_device,
             graphics_queue,
+            swapchain,
         })
     }
 }
@@ -427,6 +439,137 @@ impl VulkanSetup {
             ash_window::create_surface(entry, instance, raw_handles.0, raw_handles.1, None)
                 .expect("Failed to create Vulkan Surface")
         })
+    }
+
+    fn create_swapchain(
+        instance: &Instance,
+        physical_device: &PhysicalDevice,
+        device: &Device,
+        surface: &SurfaceKHR,
+        surface_functions: &surface::Instance,
+        inner_size_reciever: TokioReceiver<PhysicalSize<u32>>,
+    ) {
+        let swapchain_device = khr::swapchain::Device::new(instance, device);
+        unsafe {
+            // Get the Surface Capabilities
+            let surface_capabilities = surface_functions
+                .get_physical_device_surface_capabilities(*physical_device, *surface)
+                .expect("Failed to get Surface Capabilities");
+            // Get the Surface Format
+            let surface_formats = surface_functions
+                .get_physical_device_surface_formats(*physical_device, *surface)
+                .expect("Failed to get the Surface Formats");
+            // Get the Surface Present Mode
+            let surface_present_modes = surface_functions
+                .get_physical_device_surface_present_modes(*physical_device, *surface)
+                .expect("Failed to get the Surface Present Modes");
+            // Get the BEST surface format for our needs
+            let surface_format = Self::choose_swapchain_surface_format(surface_formats);
+            // Choose the BEST present mode for our needs
+            let present_mode = Self::choose_swapchain_present_mode(surface_present_modes);
+            let swapchain_extent =
+                Self::choose_swapchain_extent(&surface_capabilities, inner_size_reciever);
+            let mut min_image_count =
+                std::cmp::max::<u32>(3u32, surface_capabilities.min_image_count);
+            if surface_capabilities.max_image_count > 0
+                && min_image_count > surface_capabilities.max_image_count
+            {
+                min_image_count = surface_capabilities.min_image_count;
+            }
+            let mut image_count = surface_capabilities.min_image_count + 1;
+            if surface_capabilities.max_image_count > 0
+                && image_count > surface_capabilities.max_image_count
+            {
+                image_count = surface_capabilities.max_image_count;
+            }
+
+            let swapchain_create_info = vk::SwapchainCreateInfoKHR::default()
+                .flags(vk::SwapchainCreateFlagsKHR::default())
+                .surface(surface)
+                .min_image_count(min_image_count)
+                .image_format(surface_format)
+                .image_color_space(surface_format.color_space)
+                .image_extent(swapchain_extent)
+                .image_array_layers(1)
+                .image_usage(vk::ImageUsageFlags::COLOR_ATTACHMENT)
+                .image_sharing_mode(vk::SharingMode::EXCLUSIVE)
+                .pre_transform(surface_capabilities.current_transform)
+                .composite_alpha(vk::CompositeAlphaFlagsKHR::OPAQUE)
+                .present_mode(present_mode)
+                .clipped(true)
+                .old_swapchain(vk::SwapchainKHR::null());
+            let swapchain = swapchain_device
+                .create_swapchain(swapchain_create_info, None)
+                .expect("Failed to create Vulkan Swapchain!");
+            let swapchain_images = swapchain.get_images();
+        }
+    }
+
+    fn choose_swapchain_surface_format(formats: Vec<vk::SurfaceFormatKHR>) -> vk::SurfaceFormatKHR {
+        // Iterate over the formats
+        for format in &formats {
+            /*
+            Check if
+                - A: The format is SRGB and provides 8 bits to all channels (RGBA)
+                AND
+                - B: The colorspace is SRGB and Non-linear
+            */
+            if (format.format == vk::Format::R8G8B8A8_SRGB)
+                && (format.color_space == vk::ColorSpaceKHR::SRGB_NONLINEAR)
+            {
+                return *format;
+            }
+        }
+        // If all formats fail the above, the first format is fine
+        formats[0]
+    }
+
+    fn choose_swapchain_present_mode(present_modes: Vec<vk::PresentModeKHR>) -> vk::PresentModeKHR {
+        // Iterate over all Present Modes
+        for present_mode in present_modes {
+            /*
+            Catchs all Modes, excluding VK_KHR_shared_presentable_image.
+            We don't use this extension, so it's fine.
+            We print out warnings based on the present mode avaliable.
+            */
+            match present_mode {
+                vk::PresentModeKHR::MAILBOX => return present_mode,
+                vk::PresentModeKHR::FIFO => {
+                    println!("VSync Enabled Automatically due to lack of Mailbox Present Mode");
+                    return present_mode;
+                }
+                vk::PresentModeKHR::FIFO_RELAXED => {
+                    println!("VSync Enabled Automatically, but less efficient than regular.");
+                    println!(
+                        "This is due to lacking both Mailbox & FIFO Present Modes being unavaliable"
+                    );
+                    return present_mode;
+                }
+                vk::PresentModeKHR::IMMEDIATE => {
+                    println!("All Present Modes unavaliable, defaulting to Immediate");
+                    eprintln!("Lowest Latency but most screen tearing, be warned!");
+                    return present_mode;
+                }
+                _ => {}
+            }
+        }
+
+        // If the present mode was not found, it's either invalid or the vec is empty. Panic!
+        panic!("No Present Mode Avaliable")
+    }
+
+    fn choose_swapchain_extent(
+        capabilites: &vk::SurfaceCapabilitiesKHR,
+        mut inner_size_reciever: TokioReceiver<PhysicalSize<u32>>,
+    ) -> vk::Extent2D {
+        if capabilites.current_extent != vk::Extent2D::default().width(u32::MAX).height(u32::MAX) {
+            return capabilites.current_extent;
+        }
+
+        let size = inner_size_reciever.blocking_recv().unwrap();
+        let (width, height) = (size.width, size.height);
+
+        vk::Extent2D::default().width(width).height(height)
     }
 }
 
