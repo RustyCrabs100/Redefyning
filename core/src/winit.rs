@@ -87,8 +87,8 @@ impl AppWindow {
         ))
     }
 
-    pub(crate) fn modify_window_attrs(&mut self, attrs: WindowAttributes) {
-        self.attr = attrs;
+    pub(crate) fn modify_window_attrs(&mut self, attrs: &WindowAttributes) {
+        self.attr = attrs.clone();
     }
 
     pub(crate) fn init_render_communicator(&mut self, communicator: Sender<AppState>) {

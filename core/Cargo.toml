@@ -11,7 +11,11 @@ winit = "0.30.12"
 egui = "0.33.0"
 # Rendering
 ## Rust Vulkan Wrappers
-ash = { version = "0.38.0", optional = true }
+ash = { version = "0.38.0", optional = true, default-features = false, features = [
+    "loaded",
+    # Remove this later
+    "debug",
+] }
 ## Vulkan Surface Creation
 ash-window = "0.13.0"
 ## Raw Window Handle Creator

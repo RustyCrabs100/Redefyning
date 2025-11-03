@@ -38,7 +38,6 @@ pub enum SurfaceInstance {
     Xcb(xcb_surface::Instance),
     Wayland(wayland_surface::Instance),
 }
-
 pub struct VulkanSetup {
     window_communicator: Option<Receiver<AppState>>,
     entry: Arc<Entry>,
@@ -51,6 +50,7 @@ pub struct VulkanSetup {
     logical_device: Arc<Device>,
     graphics_queue: Arc<Queue>,
     swapchain: Arc<vk::SwapchainKHR>,
+    swapchain_device: Arc<khr::swapchain::Device>,
 }
 
 /// Merge all the other impl VulkanSetup's
@@ -89,7 +89,7 @@ impl VulkanSetup {
             Self::create_logical_device(&instance, &physical_device, &surface_functions, &surface);
         let graphics_index = Self::find_graphics_queue_family(&instance, &physical_device);
         let graphics_queue = Self::create_graphics_queue(&logical_device, &graphics_index);
-        let swapchain = Self::create_swapchain(
+        let (swapchain, swapchain_device) = Self::create_swapchain(
             &instance,
             &physical_device,
             &logical_device,
@@ -111,6 +111,7 @@ impl VulkanSetup {
             logical_device,
             graphics_queue,
             swapchain,
+            swapchain_device,
         })
     }
 }
@@ -448,8 +449,9 @@ impl VulkanSetup {
         surface: &SurfaceKHR,
         surface_functions: &surface::Instance,
         inner_size_reciever: TokioReceiver<PhysicalSize<u32>>,
-    ) {
+    ) -> (Arc<vk::SwapchainKHR>, Arc<khr::swapchain::Device>) {
         let swapchain_device = khr::swapchain::Device::new(instance, device);
+        let mut swapchain: Arc<vk::SwapchainKHR>;
         unsafe {
             // Get the Surface Capabilities
             let surface_capabilities = surface_functions
@@ -485,9 +487,9 @@ impl VulkanSetup {
 
             let swapchain_create_info = vk::SwapchainCreateInfoKHR::default()
                 .flags(vk::SwapchainCreateFlagsKHR::default())
-                .surface(surface)
+                .surface(*surface)
                 .min_image_count(min_image_count)
-                .image_format(surface_format)
+                .image_format(surface_format.format)
                 .image_color_space(surface_format.color_space)
                 .image_extent(swapchain_extent)
                 .image_array_layers(1)
@@ -498,11 +500,14 @@ impl VulkanSetup {
                 .present_mode(present_mode)
                 .clipped(true)
                 .old_swapchain(vk::SwapchainKHR::null());
-            let swapchain = swapchain_device
-                .create_swapchain(swapchain_create_info, None)
+            let swapchain_current = swapchain_device
+                .create_swapchain(&swapchain_create_info, None)
                 .expect("Failed to create Vulkan Swapchain!");
-            let swapchain_images = swapchain.get_images();
+            let swapchain_images = swapchain_device.get_swapchain_images(swapchain_current);
+            swapchain = Arc::new(swapchain_current);
         }
+
+        (swapchain, Arc::new(swapchain_device))
     }
 
     fn choose_swapchain_surface_format(formats: Vec<vk::SurfaceFormatKHR>) -> vk::SurfaceFormatKHR {
@@ -577,6 +582,8 @@ impl Drop for VulkanSetup {
     // Drop everything in Order in this, or else there's going to be segmentation faults.
     fn drop(&mut self) {
         unsafe {
+            self.swapchain_device
+                .destroy_swapchain(*self.swapchain, None);
             self.surface_functions.destroy_surface(*self.surface, None);
             self.logical_device.destroy_device(None);
             if let Some(x) = self.debug_messenger {
