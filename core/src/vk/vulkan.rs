@@ -105,7 +105,6 @@ impl VulkanSetup {
             surface_functions,
             surface,
             debug_utils_loader,
-            #[cfg(feature = "debug")]
             debug_messenger,
             physical_device,
             logical_device,
@@ -150,7 +149,6 @@ impl VulkanSetup {
                 .enumerate_instance_extension_properties(None)
                 .expect("Failed to enumerate instance extensions")
         };
-        #[cfg(feature = "debug")]
         let cstrings: Vec<CString> = extensions
             .iter()
             .map(|ext| {
