@@ -1,7 +1,7 @@
 use {
     crate::utils::{AppState, RawWindowingHandles},
-    raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle},
-    std::{convert::From, ptr::NonNull, sync::mpsc::Sender},
+    raw_window_handle::{HasDisplayHandle, HasWindowHandle},
+    std::{convert::From, sync::mpsc::Sender},
     tokio::{
         runtime::Runtime,
         sync::{mpsc::Sender as TokioSender, oneshot},

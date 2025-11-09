@@ -3,5 +3,10 @@
 #[path = "vulkan.rs"]
 pub(crate) mod vulkan;
 
-#[path = "vulkan.rs"]
 pub(crate) use vulkan::*;
+
+#[path = "setup.rs"]
+pub(crate) mod setup;
+
+#[path = "data.rs"]
+pub(crate) mod data;

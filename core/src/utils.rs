@@ -1,6 +1,12 @@
 // Use this file for global utilities
 
-use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
+use {
+    once_cell::sync::Lazy,
+    raw_window_handle::{RawDisplayHandle, RawWindowHandle},
+    std::time::{Duration, Instant},
+};
+
+pub(crate) static TIMER: Lazy<Instant> = Lazy::new(Instant::now);
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, PartialOrd, Ord)]
 pub enum AppState {
@@ -40,5 +46,74 @@ macro_rules! str_to_p_const_c_char {
         const BYTES: &[u8] = concat!($s, "\0").as_bytes();
         const REF_CSTR: &CStr = unsafe { CStr::from_bytes_with_nul_unchecked(BYTES) };
         REF_CSTR.as_ptr()
+    }};
+}
+
+fn format_duration(d: Duration) -> String {
+    let secs = d.as_secs();
+    let hours = secs / 3600;
+    let mins = (secs % 3600) / 60;
+    let secs_rem = secs % 60;
+    let millis = d.subsec_millis();
+    format!("{}:{:02}:{:02}.{:03}", hours, mins, secs_rem, millis)
+}
+
+#[macro_export]
+macro_rules! logln {
+    () => {{
+        use std::io::Write;
+        let elapsed = START.elapsed();
+        let ts = format_duration(elapsed);
+        let mut lock = io::stdout().lock();
+        writeln!(lock, "Time Elapsed since Startup: {}", ts).expect("Write Failed");
+        lock.flush().expect("Flush Failed");
+    }};
+    ($msg:expr, $location:expr) => {{
+        use std::io::Write;
+        let elapsed = START.elapsed();
+        let ts = format_duration(elapsed);
+        let mut lock = io::stdout().lock();
+        let location_upper = format!("{}", $location).to_uppercase();
+        let words = location_upper.split_whitespace()
+            .map(|w| format!("[{}]", w.to_string()))
+            .collect();
+        let message = format!($fmt, $(, $args)*);
+        let tags = words.join("");
+        writeln!(lock, "Time Elapsed since Startup: {}", ts).expect("Write Failed");
+        writeln!(lock, "[ENGINE]{}; {}", words, message);
+        lock.flush().expect("Flush Failed");
+    }};
+    ($fmt:expr, $($args:expr)*, $location:expr) => {{
+        use std::io::Write;
+        let elapsed = START.elapsed();
+        let ts = format_duration(elapsed);
+        let mut lock = io::stdout().lock();
+        let location_upper = format!("{}", $location).to_uppercase();
+        let words = location_upper.split_whitespace()
+            .map(|w| format!("[{}]", w.to_string()))
+            .collect();
+        let tags = words.join("");
+        let message = format!($fmt, $(, $args)*);
+        writeln!(lock, "Time Elapsed since Startup: {}", ts).expect("Write Failed");
+        writeln!(lock, "[ENGINE]{}; {}", words, message);
+        lock.flush().expect("Flush Failed");
+    }};
+}
+
+/// Use this for debug mode ONLY, this will evaluate to nothing when debug_assertions is disabled & the debug feature.
+#[macro_export]
+macro_rules! debug_logln {
+    () => {{
+        #[cfg(all(debug_assertions, feature = "debug"))]
+        {logln!()}
+    }};
+    ($msg:expr, $location:expr) => {{
+        #[cfg(all(debug_assertions, feature = "debug"))]
+        {logln!($msg, $location)}
+    }};
+    ($fmt:expr, $($args:expr)*, $location:expr) => {{
+        #[cfg(all(debug_assertions, feature = "debug"))] {
+            logln!($fmt, $($args)*, $location);
+        }
     }};
 }

@@ -6,6 +6,7 @@
 
 use {
     crate::utils::{AppState, RawWindowingHandles},
+    once_cell::sync::Lazy,
     std::sync::mpsc::channel,
     tokio::sync::{mpsc, oneshot},
     winit::dpi::PhysicalSize,
@@ -105,6 +106,7 @@ impl App {
     }
 
     pub fn run(self) {
+        Lazy::force(&utils::TIMER);
         // Fix this later
         #[cfg(any(
             all(feature = "debug", not(debug_assertions)),
@@ -127,23 +129,29 @@ impl App {
         let scripts = self.scripts;
 
         // Renderer thread
-        let renderer_thread = std::thread::spawn(move || {
+        let _renderer_thread = std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async move {
                 let surface_handles = oneshot_rx.await.unwrap().unpack();
 
                 #[cfg(feature = "vulkan")]
                 {
-                    let mut vulkan_setup =
-                        vk::VulkanSetup::new(surface_handles, name, version.unpack_raw(), tokio_rx)
-                            .expect("Unable to create Vulkan Setup");
+                    let mut vulkan_setup = vk::setup::VulkanSetup::new(
+                        surface_handles,
+                        name,
+                        version.unpack_raw(),
+                        tokio_rx,
+                    )
+                    .expect("Unable to create Vulkan Setup");
                     vulkan_setup.init_window_communicator(rx);
+                    let core = vk::Core::new(vulkan_setup);
+                    core.main_loop();
                 }
             });
         });
 
         // Scripting thread
-        let scripting_thread = std::thread::spawn(move || {
+        let _scripting_thread = std::thread::spawn(move || {
             let rt = tokio::runtime::Runtime::new().unwrap();
             rt.block_on(async move {
                 for script in scripts {
