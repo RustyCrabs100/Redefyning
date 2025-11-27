@@ -16,6 +16,12 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Download proper ALSA devlibs
+      run: sudo apt-get update && sudo apt-get install libasound2-dev pkg-config
+    - name: Verify pgk-config finds ALSA
+      run: pkg-config --libs --cflags alsa
+    - name: Set PKG_CONFIG_PATH
+      run: export PKG_CONFIG_PATH=/usr/lib/pkgconfig
     - name: Checks if code will compiles
       run: cargo check
     - name: Checks if code follows proper coding practices
