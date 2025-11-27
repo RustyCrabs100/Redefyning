@@ -1,0 +1,25 @@
+# Setup GitHub Actions Soon (Reminder)
+
+
+[workspace]
+members = ["core", "editor"]
+resolver = "3"
+
+[workspace.lints.clippy]
+perf = { level = "forbid", priority = -1 }
+complexity = { level = "forbid", priority = -1 }
+allow_attributes_without_reason = "forbid"
+almost_complete_range = "deny"
+almost_swapped = "forbid"
+approx_constant = "forbid"
+arc_with_non_send_sync = "forbid"
+as_conversions = "warn"
+asserts_on_constants = "deny"
+asserts_on_result_states = "forbid"
+assign_op_pattern = "deny"
+blocks_in_conditions = "forbid"
+bool_assert_comparison = "allow"
+bool_to_int_with_if = "deny"
+borrow_as_ptr = "forbid"
+
+[workspace.lints.rust]
