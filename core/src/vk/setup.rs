@@ -258,11 +258,11 @@ impl VulkanSetup {
                     .unwrap();
                 // Iterate over all the device's extensions.
                 // If the device contains all required extensions, it passes.
-                return Self::REQUIRED_DEVICE_EXTENSIONS.iter().all(|&req| {
+                Self::REQUIRED_DEVICE_EXTENSIONS.iter().all(|&req| {
                     extensions.iter().any(|ext| {
                         CStr::from_ptr(ext.extension_name.as_ptr()) == CStr::from_ptr(req)
                     })
-                });
+                })
             })
             .expect("No suitable GPU found");
         Arc::new(physical_device)
@@ -289,7 +289,7 @@ impl VulkanSetup {
                 .expect("Failed to query surface support")
         };
         // Panic if the physical device does not support Surface presentation
-        if present_support != true {
+        if !present_support {
             panic!("Selected queue family does not support presentation")
         }
         // Collect the physical device's queue family properties.
@@ -405,7 +405,7 @@ impl VulkanSetup {
     }
 
     fn create_graphics_queue(device: &Device, graphics_index: &u32) -> Arc<Queue> {
-        return Arc::new(unsafe { device.get_device_queue(*graphics_index, 0) });
+        Arc::new(unsafe { device.get_device_queue(*graphics_index, 0) })
     }
 
     fn find_graphics_queue_family(instance: &Instance, device: &PhysicalDevice) -> u32 {

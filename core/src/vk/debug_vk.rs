@@ -12,12 +12,12 @@ const fn debug() -> bool {
     {
         return true;
     }
-    return false;
+    false
 }
 // Validation Supported?
 const VALIDATION: bool = debug();
 // Validation Layer Name
-const VALIDATION_LAYER: &'static str = "VK_LAYER_KHRONOS_validation";
+const VALIDATION_LAYER: &str = "VK_LAYER_KHRONOS_validation";
 
 unsafe extern "system" fn vk_debug_callback(
     severity: vk::DebugUtilsMessageSeverityFlagsEXT,
@@ -31,10 +31,7 @@ unsafe extern "system" fn vk_debug_callback(
             vk::DebugUtilsMessageSeverityFlagsEXT::INFO => return vk::FALSE,
             _ => {}
         };
-        match validation_type {
-            vk::DebugUtilsMessageTypeFlagsEXT::GENERAL => return vk::FALSE,
-            _ => {}
-        };
+        if validation_type == vk::DebugUtilsMessageTypeFlagsEXT::GENERAL { return vk::FALSE };
         println!(
             "Validation Layer: Type: {:?}, Severity: {:?} Message: {:?}",
             validation_type,
@@ -42,7 +39,7 @@ unsafe extern "system" fn vk_debug_callback(
             (*p_callback_data).p_message,
         );
 
-        return vk::FALSE;
+        vk::FALSE
     }
 }
 

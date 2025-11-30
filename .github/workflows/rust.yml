@@ -1,10 +1,6 @@
 name: Rust
 
-on:
-  push:
-    branches: [ "main" ]
-  pull_request:
-    branches: [ "main" ]
+on: [push, pull_request]
 
 env:
   CARGO_TERM_COLOR: always
@@ -16,6 +12,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+    - name: Standardize Format
+      run: cargo fmt
     - name: Download proper ALSA devlibs
       run: sudo apt-get update && sudo apt-get install libasound2-dev pkg-config
     - name: Verify pgk-config finds ALSA

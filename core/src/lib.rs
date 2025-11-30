@@ -59,10 +59,7 @@ impl AppVersion {
         variant: u32,
         revision: Option<&'static str>,
     ) -> Self {
-        let final_revision = match revision {
-            Some(x) => x,
-            None => "stable",
-        };
+        let final_revision = revision.unwrap_or("stable");
         AppVersion(variant, major, minor, patch, final_revision)
     }
 

@@ -132,7 +132,7 @@ impl ApplicationHandler<Events> for AppWindow {
         let size = self.window.as_ref().unwrap().inner_size();
         task::block_in_place(move || {
             let rt = Runtime::new().unwrap();
-            rt.block_on((async move || inner_size_sender.send(size).await)())
+            rt.block_on(async { inner_size_sender.send(size).await })
         });
     }
 
@@ -147,10 +147,7 @@ impl ApplicationHandler<Events> for AppWindow {
             WindowEvent::RedrawRequested => {
                 println!("Requested Redraw")
             }
-            WindowEvent::KeyboardInput { event, .. } => match event.physical_key {
-                PhysicalKey::Code(KeyCode::Escape) => self.exit(event_loop),
-                _ => {}
-            },
+            WindowEvent::KeyboardInput { event, .. } => if let PhysicalKey::Code(KeyCode::Escape) = event.physical_key { self.exit(event_loop) },
             _ => self.send_app_state(),
         }
     }
